@@ -16,9 +16,9 @@ Based on manual review of `https://ona.com/` and core marketing pages, Ona is cu
 - Recent content/blog cards.
 - Final CTA and a dense, multi-column footer with legal/trust links.
 
-## Definition of “1:1 clone” for this project
+## Definition of "1:1 clone" for this project
 
-For this repo, “1:1 clone” means:
+For this repo, "1:1 clone" means:
 
 - **High visual parity**: same section order, spacing rhythm, typography hierarchy, and CTA placement.
 - **High structural parity**: same information architecture and responsive behavior patterns.
