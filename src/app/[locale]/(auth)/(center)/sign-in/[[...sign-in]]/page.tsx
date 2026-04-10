@@ -1,6 +1,4 @@
-import { SignIn } from '@clerk/nextjs';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getI18nPath } from '@/utils/Helpers';
 
 type ISignInPageProps = {
   params: Promise<{ locale: string }>;
@@ -24,6 +22,9 @@ export default async function SignInPage(props: ISignInPageProps) {
   setRequestLocale(locale);
 
   return (
-    <SignIn path={getI18nPath('/sign-in', locale)} />
+    <div className="text-center">
+      <h1 className="text-2xl font-bold">Sign In</h1>
+      <p className="mt-4 text-gray-600">Authentication is not configured.</p>
+    </div>
   );
 };

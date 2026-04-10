@@ -1,6 +1,4 @@
-import { UserProfile } from '@clerk/nextjs';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getI18nPath } from '@/utils/Helpers';
 
 type IUserProfilePageProps = {
   params: Promise<{ locale: string }>;
@@ -23,10 +21,9 @@ export default async function UserProfilePage(props: IUserProfilePageProps) {
   setRequestLocale(locale);
 
   return (
-    <div className="my-6 -ml-16">
-      <UserProfile
-        path={getI18nPath('/dashboard/user-profile', locale)}
-      />
+    <div className="py-5">
+      <h1 className="text-2xl font-bold">User Profile</h1>
+      <p className="mt-4 text-gray-600">Authentication is not configured.</p>
     </div>
   );
 };
