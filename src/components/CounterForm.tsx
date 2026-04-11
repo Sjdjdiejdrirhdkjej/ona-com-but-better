@@ -17,13 +17,18 @@ export const CounterForm = () => {
   const router = useRouter();
 
   const handleIncrement = form.handleSubmit(async (data) => {
-    await fetch(`/api/counter`, {
+    const response = await fetch(`/api/counter`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
     });
+
+    if (!response.ok) {
+      form.setError('root', { message: t('error_increment') });
+      return;
+    }
 
     form.reset();
     router.refresh();
@@ -47,6 +52,10 @@ export const CounterForm = () => {
           <div className="my-2 text-xs italic text-red-500">{form.formState.errors.increment?.message}</div>
         )}
       </div>
+
+      {form.formState.errors.root?.message && (
+        <div className="my-2 text-xs italic text-red-500">{form.formState.errors.root.message}</div>
+      )}
 
       <div className="mt-2">
         <button

@@ -25,7 +25,8 @@
   "CounterForm": {
     "presentation": "The counter is stored in the database and incremented by the value you provide.",
     "label_increment": "Increment by",
-    "button_increment": "Increment"
+    "button_increment": "Increment",
+    "error_increment": "Failed to increment the counter. Please try again."
   },
   "CurrentCount": {
     "count": "Count: {count}"
