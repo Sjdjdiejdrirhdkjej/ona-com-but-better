@@ -8,12 +8,12 @@
     "sign_up_link": "Sign up"
   },
   "BaseTemplate": {
-    "description": "Starter code for your Nextjs Boilerplate with Tailwind CSS",
-    "made_with": "Made with <author></author>."
+    "description": "AI-native operations platform",
+    "made_with": "Built by the Ona team."
   },
   "Index": {
-    "meta_title": "Next.js Boilerplate Presentation",
-    "meta_description": "Next js Boilerplate is the perfect starter code for your project. Build your React application with the Next.js framework.",
+    "meta_title": "Ona | AI agents for operations",
+    "meta_description": "Ona helps teams deploy background agents that automate workflows, triage tasks, and accelerate operations.",
     "sponsors_title": "Sponsors"
   },
   "Counter": {

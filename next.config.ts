@@ -20,10 +20,10 @@ const baseConfig: NextConfig = {
   serverExternalPackages: ['@electric-sql/pglite'],
 };
 
-let configWithPlugins = createNextIntlPlugin('./src/libs/I18n.ts')(baseConfig);
+const nextIntlConfig = createNextIntlPlugin('./src/libs/I18n.ts')(baseConfig);
 
-if (process.env.ANALYZE === 'true') {
-  configWithPlugins = withBundleAnalyzer()(configWithPlugins);
-}
+const configWithPlugins = process.env.ANALYZE === 'true'
+  ? withBundleAnalyzer()(nextIntlConfig)
+  : nextIntlConfig;
 
 export default configWithPlugins;
