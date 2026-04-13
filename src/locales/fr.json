@@ -3,13 +3,11 @@
     "home_link": "Accueil",
     "about_link": "A propos",
     "counter_link": "Compteur",
-    "portfolio_link": "Portfolio",
-    "sign_in_link": "Se connecter",
-    "sign_up_link": "S'inscrire"
+    "portfolio_link": "Portfolio"
   },
   "BaseTemplate": {
-    "description": "Code de démarrage pour Next.js avec Tailwind CSS",
-    "made_with": "Fait avec <author></author>."
+    "description": "Une meilleure version de ona.com",
+    "made_with": "Tous droits réservés."
   },
   "Index": {
     "meta_title": "Présentation de Next.js Boilerplate",
@@ -19,8 +17,7 @@
   "Counter": {
     "meta_title": "Compteur",
     "meta_description": "Un exemple d'opération DB",
-    "loading_counter": "Chargement du compteur...",
-    "security_powered_by": "Sécurité, détection de bot et rate limiting propulsés par"
+    "loading_counter": "Chargement du compteur..."
   },
   "CounterForm": {
     "presentation": "Le compteur est stocké dans la base de données et incrémenté par la valeur que vous fournissez.",
@@ -52,25 +49,12 @@
     "content": "Créé un ensemble de matériel promotionnel et d'éléments de marquage pour un événement d'entreprise. Conçu un thème visuellement unifié, englobant un logo, des affiches, des bannières et des actifs numériques. Intégrer l'identité de marque du client tout en l'insufflant à une approche contemporaine et innovante.",
     "code_review_powered_by": "Code review propulsé par"
   },
-  "SignIn": {
-    "meta_title": "Se connecter",
-    "meta_description": "Connectez-vous à votre compte avec facilité."
-  },
-  "SignUp": {
-    "meta_title": "S'inscrire",
-    "meta_description": "Créez un compte facilement grâce à notre processus d'inscription intuitif."
-  },
   "Dashboard": {
     "meta_title": "Tableau de bord",
     "hello_message": "Bonjour {email}!",
     "alternative_message": "Vous voulez créer votre SaaS plus rapidement en utilisant la même stack ? Essayez <url></url>."
   },
-  "UserProfile": {
-    "meta_title": "Profil de l'utilisateur"
-  },
   "DashboardLayout": {
-    "dashboard_link": "Tableau de bord",
-    "user_profile_link": "Gérer votre compte",
-    "sign_out": "Se déconnecter"
+    "dashboard_link": "Tableau de bord"
   }
 }

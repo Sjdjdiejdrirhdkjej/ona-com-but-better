@@ -8,7 +8,7 @@ export const Hello = async () => {
     <>
       <p>
         {`👋 `}
-        {t('hello_message', { email: '' })}
+        {t('hello_message', { email: 'user' })}
       </p>
       <p>
         {t.rich('alternative_message', {

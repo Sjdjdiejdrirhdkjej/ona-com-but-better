@@ -7,8 +7,25 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: `${getBaseUrl()}/`,
       lastModified: new Date(),
       changeFrequency: 'daily',
-      priority: 0.7,
+      priority: 1.0,
     },
-    // Add more URLs here
+    {
+      url: `${getBaseUrl()}/about/`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${getBaseUrl()}/counter/`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.5,
+    },
+    {
+      url: `${getBaseUrl()}/portfolio/`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
   ];
 }

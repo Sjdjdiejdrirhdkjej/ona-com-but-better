@@ -9,7 +9,7 @@ export default function GlobalError(_props: {
   return (
     <html lang={routing.defaultLocale}>
       <body>
-        <NextError statusCode={0} />
+        <NextError statusCode={500} />
       </body>
     </html>
   );
