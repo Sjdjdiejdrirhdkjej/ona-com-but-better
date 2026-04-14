@@ -168,6 +168,44 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+function CopyDeviceCode({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-1.5 text-xs text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-800"
+    >
+      {copied
+        ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Copied!
+            </>
+          )
+        : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <rect x="4" y="1" width="7" height="8" rx="1" stroke="currentColor" strokeWidth="1.2" />
+                <path d="M1 4v6a1 1 0 001 1h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              Copy code
+            </>
+          )}
+    </button>
+  );
+}
+
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user';
   const text = typeof msg.content === 'string'
@@ -1000,6 +1038,7 @@ export default function AppPage() {
                       <p className="font-mono text-2xl font-bold tracking-widest text-gray-900">
                         {deviceAuth.user_code}
                       </p>
+                      <CopyDeviceCode code={deviceAuth.user_code} />
                     </div>
 
                     {/* Open GitHub button */}
