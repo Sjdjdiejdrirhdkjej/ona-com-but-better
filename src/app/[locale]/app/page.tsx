@@ -458,7 +458,7 @@ export default function AppPage() {
               </button>
               <button
                 onClick={e => deleteConversation(c.id, e)}
-                className="absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:text-gray-600 group-hover:opacity-100"
+                className="delete-btn absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:text-gray-600 group-hover:opacity-100"
                 aria-label="Delete task"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -651,6 +651,9 @@ export default function AppPage() {
         @keyframes ona-pulse {
           0%, 100% { transform: scale(1); opacity: 0.4; }
           50% { transform: scale(1.3); opacity: 1; }
+        }
+        @media (hover: none) {
+          .delete-btn { opacity: 1 !important; }
         }
       `}
       </style>
