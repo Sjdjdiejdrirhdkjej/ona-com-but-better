@@ -31,6 +31,7 @@
     "test:lighthouse": "run-p start lighthouse --race"
   },
   "dependencies": {
+    "@daytonaio/sdk": "^0.165.0",
     "@electric-sql/pglite": "^0.4.4",
     "@hookform/resolvers": "^5.2.2",
     "@t3-oss/env-nextjs": "^0.13.11",
