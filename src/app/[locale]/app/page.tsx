@@ -117,10 +117,47 @@ export default function AppPage() {
   const [input, setInput] = useState('');
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const syncedIds = useRef<Set<string>>(new Set());
+
+  // Load conversation history from DB on mount
+  useEffect(() => {
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/conversations');
+        if (!res.ok) return;
+        const data = await res.json() as Array<{
+          id: string;
+          title: string;
+          createdAt: string;
+          messages: Array<{ id: string; role: string; content: unknown }>;
+        }>;
+
+        if (data.length > 0) {
+          const loaded: Conversation[] = data.map(c => ({
+            id: c.id,
+            title: c.title,
+            createdAt: new Date(c.createdAt).getTime(),
+            messages: c.messages.map(m => ({
+              id: m.id,
+              role: m.role as 'user' | 'assistant',
+              content: m.content as string | ContentPart[],
+            })),
+          }));
+          loaded.forEach(c => syncedIds.current.add(c.id));
+          setConversations([newConversation(), ...loaded]);
+        }
+      } catch {}
+      finally {
+        setLoadingHistory(false);
+      }
+    }
+    loadHistory();
+  }, []);
 
   // Detect mobile vs desktop and set sidebar default
   useEffect(() => {
@@ -171,9 +208,15 @@ export default function AppPage() {
     closeSidebarOnMobile();
   }
 
-  function deleteConversation(id: string, e: React.MouseEvent) {
+  async function deleteConversation(id: string, e: React.MouseEvent) {
     e.stopPropagation();
-    setConversations(prev => {
+    if (syncedIds.current.has(id)) {
+      try {
+        await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+        syncedIds.current.delete(id);
+      } catch {}
+    }
+    setConversations((prev) => {
       const next = prev.filter(c => c.id !== id);
       if (id === activeId) {
         if (next.length === 0) {
@@ -226,6 +269,39 @@ export default function AppPage() {
         : c,
     ));
 
+    // Persist to DB
+    const convId = activeId;
+    const convTitle = isFirstMessage ? title : currentConv.title;
+    if (!syncedIds.current.has(convId)) {
+      try {
+        await fetch('/api/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: convId, title: convTitle }),
+        });
+        syncedIds.current.add(convId);
+      } catch {}
+    } else if (isFirstMessage) {
+      try {
+        await fetch(`/api/conversations/${convId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: convTitle }),
+        });
+      } catch {}
+    }
+
+    // Save user message
+    try {
+      await fetch(`/api/conversations/${convId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: userMsg.id, role: 'user', content: userMsg.content }),
+      });
+    } catch {}
+
+    let assistantText = '';
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -256,6 +332,7 @@ export default function AppPage() {
           try {
             const { delta } = JSON.parse(data) as { delta: string };
             if (delta) {
+              assistantText += delta;
               setConversations(prev =>
                 prev.map(c =>
                   c.id === activeId
@@ -275,6 +352,7 @@ export default function AppPage() {
         }
       }
     } catch (err) {
+      assistantText = `Something went wrong: ${(err as Error).message}`;
       setConversations(prev =>
         prev.map(c =>
           c.id === activeId
@@ -282,7 +360,7 @@ export default function AppPage() {
                 ...c,
                 messages: c.messages.map(m =>
                   m.id === assistantId
-                    ? { ...m, content: `Something went wrong: ${(err as Error).message}` }
+                    ? { ...m, content: assistantText }
                     : m,
                 ),
               }
@@ -291,6 +369,17 @@ export default function AppPage() {
       );
     } finally {
       setLoading(false);
+    }
+
+    // Save assistant message
+    if (assistantText) {
+      try {
+        await fetch(`/api/conversations/${convId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId: assistantId, role: 'assistant', content: assistantText }),
+        });
+      } catch {}
     }
   }, [activeId, conversations, loading]);
 
@@ -346,34 +435,38 @@ export default function AppPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
-        {conversations.map(c => (
-          <div
-            key={c.id}
-            className={`group relative flex w-full items-start rounded-xl px-3 py-3 text-left transition-colors ${
-              c.id === activeId
-                ? 'bg-black/8 text-gray-900'
-                : 'text-gray-600 hover:bg-black/5 hover:text-gray-900 active:bg-black/8'
-            }`}
-          >
-            <button
-              onClick={() => { setActiveId(c.id); closeSidebarOnMobile(); }}
-              className="min-w-0 flex-1 text-left"
-              aria-label={`Switch to task: ${c.title}`}
+        {loadingHistory
+          ? (
+              <div className="px-3 py-4 text-xs text-gray-400">Loading history…</div>
+            )
+          : conversations.filter(c => c.messages.length > 0).map(c => (
+            <div
+              key={c.id}
+              className={`group relative flex w-full items-start rounded-xl px-3 py-3 text-left transition-colors ${
+                c.id === activeId
+                  ? 'bg-black/8 text-gray-900'
+                  : 'text-gray-600 hover:bg-black/5 hover:text-gray-900 active:bg-black/8'
+              }`}
             >
-              <p className="truncate pr-6 text-sm font-medium leading-tight">{c.title}</p>
-              <p className="mt-0.5 text-xs text-gray-400">{relativeTime(c.createdAt)}</p>
-            </button>
-            <button
-              onClick={e => deleteConversation(c.id, e)}
-              className="absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:text-gray-600 group-hover:opacity-100"
-              aria-label="Delete task"
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </button>
-          </div>
-        ))}
+              <button
+                onClick={() => { setActiveId(c.id); closeSidebarOnMobile(); }}
+                className="min-w-0 flex-1 text-left"
+                aria-label={`Switch to task: ${c.title}`}
+              >
+                <p className="truncate pr-6 text-sm font-medium leading-tight">{c.title}</p>
+                <p className="mt-0.5 text-xs text-gray-400">{relativeTime(c.createdAt)}</p>
+              </button>
+              <button
+                onClick={e => deleteConversation(c.id, e)}
+                className="absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:text-gray-600 group-hover:opacity-100"
+                aria-label="Delete task"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          ))}
       </div>
 
       <div className="shrink-0 border-t border-black/8 px-3 py-3">
