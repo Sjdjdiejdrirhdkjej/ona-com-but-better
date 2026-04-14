@@ -7,6 +7,7 @@ const baseConfig: NextConfig = {
   eslint: {
     dirs: ['.'],
   },
+  allowedDevOrigins: ['*.replit.dev', '*.kirk.replit.dev', '*.repl.co'],
   images: {
     remotePatterns: [
       {
