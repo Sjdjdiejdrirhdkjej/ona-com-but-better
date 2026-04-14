@@ -39,6 +39,15 @@ type GitHubStatus = {
   error?: string;
 };
 
+type DeviceAuthState = {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  interval: number;
+  status: 'waiting' | 'polling' | 'error';
+  errorMsg?: string;
+};
+
 const SUGGESTIONS = [
   'Inspect my repos and suggest agent tasks',
   'Clone a repo and open a docs sync PR',
@@ -227,6 +236,8 @@ export default function AppPage() {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [search, setSearch] = useState('');
   const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null);
+  const [deviceAuth, setDeviceAuth] = useState<DeviceAuthState | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -284,6 +295,82 @@ export default function AppPage() {
   async function disconnectGitHub() {
     await fetch('/api/github/logout', { method: 'POST' });
     setGithubStatus(prev => ({ configured: prev?.configured ?? true, connected: false }));
+  }
+
+  function cancelDeviceAuth() {
+    if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    setDeviceAuth(null);
+  }
+
+  async function startDeviceAuth() {
+    try {
+      const res = await fetch('/api/github/device/start', { method: 'POST' });
+      const data = await res.json() as {
+        device_code?: string;
+        user_code?: string;
+        verification_uri?: string;
+        interval?: number;
+        error?: string;
+      };
+      if (!res.ok || !data.device_code) {
+        throw new Error(data.error ?? 'Failed to start device auth');
+      }
+      const auth: DeviceAuthState = {
+        device_code: data.device_code,
+        user_code: data.user_code!,
+        verification_uri: data.verification_uri ?? 'https://github.com/login/device',
+        interval: (data.interval ?? 5) * 1000,
+        status: 'polling',
+      };
+      setDeviceAuth(auth);
+      schedulePoll(auth);
+    } catch (err) {
+      setDeviceAuth({ device_code: '', user_code: '', verification_uri: '', interval: 5000, status: 'error', errorMsg: (err as Error).message });
+    }
+  }
+
+  function schedulePoll(auth: DeviceAuthState) {
+    pollTimerRef.current = setTimeout(() => pollDeviceAuth(auth), auth.interval);
+  }
+
+  async function pollDeviceAuth(auth: DeviceAuthState) {
+    try {
+      const res = await fetch('/api/github/device/poll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_code: auth.device_code }),
+      });
+      const data = await res.json() as {
+        status: string;
+        user?: GitHubStatus['user'];
+        interval?: number;
+        error?: string;
+      };
+
+      if (data.status === 'authorized') {
+        setDeviceAuth(null);
+        setGithubStatus({ configured: true, connected: true, user: data.user });
+        return;
+      }
+      if (data.status === 'expired') {
+        setDeviceAuth(prev => prev ? { ...prev, status: 'error', errorMsg: 'Code expired. Please try again.' } : null);
+        return;
+      }
+      if (data.status === 'denied') {
+        setDeviceAuth(prev => prev ? { ...prev, status: 'error', errorMsg: 'Access denied.' } : null);
+        return;
+      }
+      if (data.status === 'error') {
+        setDeviceAuth(prev => prev ? { ...prev, status: 'error', errorMsg: data.error ?? 'Unknown error' } : null);
+        return;
+      }
+      const nextInterval = data.status === 'slow_down' ? (data.interval ?? auth.interval / 1000 + 5) * 1000 : auth.interval;
+      const nextAuth = { ...auth, interval: nextInterval };
+      setDeviceAuth(nextAuth);
+      schedulePoll(nextAuth);
+    } catch {
+      schedulePoll(auth);
+    }
   }
 
   // Detect mobile vs desktop and set sidebar default
@@ -694,20 +781,17 @@ export default function AppPage() {
                 </button>
               )
             : (
-                <a
-                  href="/api/github/auth"
-                  className={`flex items-center gap-2 rounded-lg border border-black/10 px-3 py-2 text-sm transition-colors ${
-                    githubStatus?.configured === false
-                      ? 'pointer-events-none bg-gray-100 text-gray-400'
-                      : 'bg-gray-950 text-white hover:opacity-85 active:opacity-75'
-                  }`}
-                  title={githubStatus?.configured === false ? 'GitHub OAuth needs app credentials first.' : 'Connect GitHub to let Ona inspect repos and open PRs.'}
+                <button
+                  onClick={startDeviceAuth}
+                  disabled={githubStatus?.configured === false}
+                  title={githubStatus?.configured === false ? 'GITHUB_CLIENT_ID is not configured.' : 'Connect GitHub to let Ona inspect repos and open PRs.'}
+                  className="flex items-center gap-2 rounded-lg border border-black/10 px-3 py-2 text-sm transition-colors bg-gray-950 text-white hover:opacity-85 active:opacity-75 disabled:pointer-events-none disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.77.4.08.55-.18.55-.4 0-.2-.01-.86-.01-1.56-2.01.38-2.53-.5-2.69-.95-.09-.23-.48-.95-.82-1.14-.28-.16-.68-.55-.01-.56.63-.01 1.08.59 1.23.83.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.37 7.37 0 018 3.95c.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.25.54.74.54 1.5 0 1.09-.01 1.96-.01 2.23 0 .22.15.48.55.4A8.13 8.13 0 0016 8.2C16 3.67 12.42 0 8 0z" />
                   </svg>
                   <span className="hidden sm:inline">Connect GitHub</span>
-                </a>
+                </button>
               )}
           <button
             onClick={createNewChat}
@@ -765,7 +849,7 @@ export default function AppPage() {
                     </p>
                     {githubStatus?.configured === false && (
                       <p className="mb-4 max-w-sm rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-                        GitHub OAuth needs GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET before users can connect their repositories.
+                        GitHub Device Auth needs GITHUB_CLIENT_ID before users can connect their repositories.
                       </p>
                     )}
                     <div className="flex flex-wrap justify-center gap-2">
@@ -863,6 +947,87 @@ export default function AppPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Device Auth Modal ── */}
+      {deviceAuth && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+          onClick={e => e.target === e.currentTarget && cancelDeviceAuth()}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-gray-200 p-7 shadow-2xl"
+            style={{ backgroundColor: '#f7f6f2' }}
+          >
+            <div className="mb-5 flex items-start justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900">Connect GitHub</h2>
+                <p className="mt-0.5 text-xs text-gray-500">Device authorization flow</p>
+              </div>
+              <button
+                onClick={cancelDeviceAuth}
+                className="rounded-lg p-1 text-gray-400 hover:bg-black/6 hover:text-gray-700"
+                aria-label="Cancel"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+
+            {deviceAuth.status === 'error'
+              ? (
+                  <div className="space-y-4">
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {deviceAuth.errorMsg ?? 'Something went wrong.'}
+                    </p>
+                    <button
+                      onClick={cancelDeviceAuth}
+                      className="w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:opacity-85"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )
+              : (
+                  <div className="space-y-5">
+                    <p className="text-sm text-gray-600">
+                      Visit the URL below and enter the code to authorize Ona.
+                    </p>
+
+                    {/* Code display */}
+                    <div className="rounded-xl border border-gray-300 bg-white px-4 py-4 text-center">
+                      <p className="mb-1 text-xs font-medium uppercase tracking-widest text-gray-400">Your code</p>
+                      <p className="font-mono text-2xl font-bold tracking-widest text-gray-900">
+                        {deviceAuth.user_code}
+                      </p>
+                    </div>
+
+                    {/* Open GitHub button */}
+                    <a
+                      href={deviceAuth.verification_uri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:opacity-85"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.77.4.08.55-.18.55-.4 0-.2-.01-.86-.01-1.56-2.01.38-2.53-.5-2.69-.95-.09-.23-.48-.95-.82-1.14-.28-.16-.68-.55-.01-.56.63-.01 1.08.59 1.23.83.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.37 7.37 0 018 3.95c.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.25.54.74.54 1.5 0 1.09-.01 1.96-.01 2.23 0 .22.15.48.55.4A8.13 8.13 0 0016 8.2C16 3.67 12.42 0 8 0z" />
+                      </svg>
+                      Open {deviceAuth.verification_uri.replace('https://', '')}
+                    </a>
+
+                    {/* Polling indicator */}
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
+                      <span
+                        className="inline-block size-1.5 rounded-full bg-green-400"
+                        style={{ animation: 'ona-pulse 1.2s ease-in-out infinite' }}
+                      />
+                      Waiting for authorization…
+                    </div>
+                  </div>
+                )}
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes ona-pulse {

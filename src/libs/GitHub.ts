@@ -6,9 +6,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const GITHUB_API = 'https://api.github.com';
-const TOKEN_COOKIE = 'ona_github_token';
-const USER_COOKIE = 'ona_github_user';
-const STATE_COOKIE = 'ona_github_oauth_state';
+export const TOKEN_COOKIE = 'ona_github_token';
+export const USER_COOKIE = 'ona_github_user';
 const WORKSPACE_ROOT = '/tmp/ona-github-workspaces';
 
 export type GitHubUser = {
@@ -18,44 +17,122 @@ export type GitHubUser = {
   html_url?: string;
 };
 
-export type GitHubAuthStatus = {
-  configured: boolean;
-  connected: boolean;
-  user?: GitHubUser;
-  error?: string;
+// ── Device Auth helpers ────────────────────────────────────────────────────
+
+export type DeviceCodeResponse = {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
 };
 
-export function getGitHubConfig() {
-  return {
-    clientId: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    configured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
-  };
+export type DevicePollResult =
+  | { status: 'authorized'; access_token: string }
+  | { status: 'pending' }
+  | { status: 'slow_down'; interval: number }
+  | { status: 'expired' }
+  | { status: 'denied' }
+  | { status: 'error'; message: string };
+
+export function getGitHubClientId() {
+  return process.env.GITHUB_CLIENT_ID ?? '';
 }
 
-export function getGitHubRedirectUri(req: Request) {
-  if (process.env.GITHUB_REDIRECT_URI) {
-    return process.env.GITHUB_REDIRECT_URI;
+export function isGitHubConfigured() {
+  return Boolean(process.env.GITHUB_CLIENT_ID);
+}
+
+export async function requestDeviceCode(): Promise<DeviceCodeResponse> {
+  const clientId = getGitHubClientId();
+  if (!clientId) {
+    throw new Error('GITHUB_CLIENT_ID is not configured.');
   }
-  return new URL('/api/github/callback', req.url).toString();
+
+  const res = await fetch('https://github.com/login/device/code', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: clientId,
+      scope: 'repo read:user user:email',
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`GitHub device code request failed: ${res.status}`);
+  }
+
+  const data = await res.json() as DeviceCodeResponse & { error?: string; error_description?: string };
+  if (data.error) {
+    throw new Error(data.error_description ?? data.error);
+  }
+
+  return data;
 }
 
-export function makeCookieOptions(maxAge?: number) {
-  return {
-    httpOnly: true,
-    sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    ...(maxAge ? { maxAge } : {}),
+export async function pollDeviceToken(deviceCode: string): Promise<DevicePollResult> {
+  const clientId = getGitHubClientId();
+  if (!clientId) {
+    return { status: 'error', message: 'GITHUB_CLIENT_ID is not configured.' };
+  }
+
+  const res = await fetch('https://github.com/login/oauth/access_token', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: clientId,
+      device_code: deviceCode,
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    }),
+  });
+
+  if (!res.ok) {
+    return { status: 'error', message: `GitHub poll failed: ${res.status}` };
+  }
+
+  const data = await res.json() as {
+    access_token?: string;
+    error?: string;
+    interval?: number;
   };
+
+  if (data.access_token) {
+    return { status: 'authorized', access_token: data.access_token };
+  }
+
+  switch (data.error) {
+    case 'authorization_pending': return { status: 'pending' };
+    case 'slow_down': return { status: 'slow_down', interval: data.interval ?? 10 };
+    case 'expired_token': return { status: 'expired' };
+    case 'access_denied': return { status: 'denied' };
+    default: return { status: 'error', message: data.error ?? 'Unknown error' };
+  }
 }
 
-export { STATE_COOKIE, TOKEN_COOKIE, USER_COOKIE };
+// ── Cookie helpers ─────────────────────────────────────────────────────────
+
+export function tokenCookieHeader(value: string, maxAge: number) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `${TOKEN_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+}
+
+export function clearCookieHeader(name: string) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
+}
 
 export async function getGitHubToken() {
   const cookieStore = await cookies();
   return cookieStore.get(TOKEN_COOKIE)?.value;
 }
+
+// ── GitHub API wrapper ─────────────────────────────────────────────────────
 
 export async function githubFetch<T>(token: string, endpoint: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${GITHUB_API}${endpoint}`, {
@@ -82,6 +159,8 @@ export async function githubFetch<T>(token: string, endpoint: string, init: Requ
 export async function getGitHubViewer(token: string) {
   return githubFetch<GitHubUser>(token, '/user');
 }
+
+// ── Repo path helpers ──────────────────────────────────────────────────────
 
 function encodePath(value: string) {
   return value.split('/').map(encodeURIComponent).join('/');
@@ -116,8 +195,10 @@ async function readFileSha(token: string, owner: string, repo: string, filePath:
   }
 }
 
+// ── AI tool definitions ────────────────────────────────────────────────────
+
 export const githubToolDefinitions = [
-  // ── Identity ──────────────────────────────────────────────────────────────
+  // Identity
   {
     type: 'function',
     function: {
@@ -127,7 +208,7 @@ export const githubToolDefinitions = [
     },
   },
 
-  // ── Repository discovery ──────────────────────────────────────────────────
+  // Repository discovery
   {
     type: 'function',
     function: {
@@ -136,7 +217,7 @@ export const githubToolDefinitions = [
       parameters: {
         type: 'object',
         properties: {
-          visibility: { type: 'string', enum: ['all', 'public', 'private'], description: 'Filter by visibility.' },
+          visibility: { type: 'string', enum: ['all', 'public', 'private'] },
           affiliation: { type: 'string', description: 'Comma-separated: owner, collaborator, organization_member.' },
           per_page: { type: 'number', minimum: 1, maximum: 100 },
         },
@@ -148,11 +229,11 @@ export const githubToolDefinitions = [
     type: 'function',
     function: {
       name: 'github_get_repository',
-      description: 'Get metadata for a repository (language, default branch, open issues count, etc).',
+      description: 'Get metadata for a repository (language, default branch, open issues, etc).',
       parameters: {
         type: 'object',
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
         },
@@ -164,7 +245,7 @@ export const githubToolDefinitions = [
     type: 'function',
     function: {
       name: 'github_search_code',
-      description: 'Search for code across a repository or all accessible repos. Use to locate files, functions, imports, or patterns before making changes.',
+      description: 'Search for code across repositories. Use to locate files, functions, or patterns before making changes.',
       parameters: {
         type: 'object',
         required: ['query'],
@@ -177,20 +258,19 @@ export const githubToolDefinitions = [
     },
   },
 
-  // ── File system ───────────────────────────────────────────────────────────
+  // File system
   {
     type: 'function',
     function: {
-      name: 'github_list_directory',
-      description: 'List files and folders at a path in a repository.',
+      name: 'github_get_file_tree',
+      description: 'Get the full recursive file tree of a repository. Use to understand structure before reading files.',
       parameters: {
         type: 'object',
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          path: { type: 'string', description: 'Directory path. Defaults to repo root.' },
-          ref: { type: 'string', description: 'Branch, tag, or SHA.' },
+          branch: { type: 'string', description: 'Defaults to default branch.' },
         },
         additionalProperties: false,
       },
@@ -199,15 +279,16 @@ export const githubToolDefinitions = [
   {
     type: 'function',
     function: {
-      name: 'github_get_file_tree',
-      description: 'Get the full recursive file tree of a repository. Use to understand project structure before reading individual files.',
+      name: 'github_list_directory',
+      description: 'List files and folders at a path in a repository.',
       parameters: {
         type: 'object',
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          branch: { type: 'string', description: 'Branch to read from. Defaults to repository default branch.' },
+          path: { type: 'string', description: 'Directory path. Defaults to root.' },
+          ref: { type: 'string', description: 'Branch, tag, or SHA.' },
         },
         additionalProperties: false,
       },
@@ -222,7 +303,7 @@ export const githubToolDefinitions = [
         type: 'object',
         required: ['path'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           path: { type: 'string', description: 'File path inside the repository.' },
@@ -233,7 +314,7 @@ export const githubToolDefinitions = [
     },
   },
 
-  // ── Branches & commits ────────────────────────────────────────────────────
+  // Branches & commits
   {
     type: 'function',
     function: {
@@ -242,7 +323,7 @@ export const githubToolDefinitions = [
       parameters: {
         type: 'object',
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           per_page: { type: 'number', minimum: 1, maximum: 100 },
@@ -260,11 +341,11 @@ export const githubToolDefinitions = [
         type: 'object',
         required: ['newBranch'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          baseBranch: { type: 'string', description: 'Branch to start from. Defaults to default branch.' },
-          newBranch: { type: 'string', description: 'Name of the new branch to create.' },
+          baseBranch: { type: 'string', description: 'Source branch. Defaults to default branch.' },
+          newBranch: { type: 'string', description: 'Name of the new branch.' },
         },
         additionalProperties: false,
       },
@@ -274,15 +355,15 @@ export const githubToolDefinitions = [
     type: 'function',
     function: {
       name: 'github_list_commits',
-      description: 'List recent commits on a branch. Use for weekly digests, audit trails, and change summaries.',
+      description: 'List recent commits. Use for weekly digests, change summaries, and audit trails.',
       parameters: {
         type: 'object',
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          branch: { type: 'string', description: 'Branch name. Defaults to default branch.' },
-          since: { type: 'string', description: 'ISO 8601 date. Only commits after this date.' },
+          branch: { type: 'string', description: 'Defaults to default branch.' },
+          since: { type: 'string', description: 'ISO 8601 date — only commits after this.' },
           per_page: { type: 'number', minimum: 1, maximum: 100 },
           author: { type: 'string', description: 'Filter by GitHub login or email.' },
         },
@@ -299,7 +380,7 @@ export const githubToolDefinitions = [
         type: 'object',
         required: ['sha'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           sha: { type: 'string', description: 'Commit SHA.' },
@@ -309,22 +390,22 @@ export const githubToolDefinitions = [
     },
   },
 
-  // ── File writes ───────────────────────────────────────────────────────────
+  // File writes
   {
     type: 'function',
     function: {
       name: 'github_upsert_file',
-      description: 'Create or update a single file in a branch. Use for targeted code changes, documentation updates, or config edits.',
+      description: 'Create or update a single file in a branch.',
       parameters: {
         type: 'object',
         required: ['path', 'branch', 'content', 'message'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          path: { type: 'string', description: 'File path inside the repository.' },
-          branch: { type: 'string', description: 'Target branch to write to.' },
-          content: { type: 'string', description: 'Full UTF-8 file content to write.' },
+          path: { type: 'string', description: 'File path inside the repo.' },
+          branch: { type: 'string', description: 'Target branch.' },
+          content: { type: 'string', description: 'Full UTF-8 file content.' },
           message: { type: 'string', description: 'Commit message.' },
         },
         additionalProperties: false,
@@ -340,7 +421,7 @@ export const githubToolDefinitions = [
         type: 'object',
         required: ['path', 'branch', 'message'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           path: { type: 'string', description: 'File path to delete.' },
@@ -352,19 +433,19 @@ export const githubToolDefinitions = [
     },
   },
 
-  // ── Pull requests ─────────────────────────────────────────────────────────
+  // Pull requests
   {
     type: 'function',
     function: {
       name: 'github_list_pull_requests',
-      description: 'List pull requests in a repository. Use to find stale PRs, review-needed PRs, or recent activity.',
+      description: 'List pull requests. Use to find stale PRs, review-needed PRs, or recent activity.',
       parameters: {
         type: 'object',
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          state: { type: 'string', enum: ['open', 'closed', 'all'], description: 'Filter by state. Defaults to open.' },
+          state: { type: 'string', enum: ['open', 'closed', 'all'], description: 'Defaults to open.' },
           sort: { type: 'string', enum: ['created', 'updated', 'popularity', 'long-running'] },
           per_page: { type: 'number', minimum: 1, maximum: 100 },
         },
@@ -376,15 +457,15 @@ export const githubToolDefinitions = [
     type: 'function',
     function: {
       name: 'github_get_pull_request',
-      description: 'Get full details of a pull request including its diff URL, reviewers, labels, and mergeable state.',
+      description: 'Get full details of a pull request.',
       parameters: {
         type: 'object',
         required: ['pull_number'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          pull_number: { type: 'number', description: 'PR number.' },
+          pull_number: { type: 'number' },
         },
         additionalProperties: false,
       },
@@ -394,15 +475,15 @@ export const githubToolDefinitions = [
     type: 'function',
     function: {
       name: 'github_get_pr_diff',
-      description: 'Get the raw unified diff of a pull request. Use for code review, impact analysis, or CVE remediation.',
+      description: 'Get the raw unified diff of a pull request. Use for code review and impact analysis.',
       parameters: {
         type: 'object',
         required: ['pull_number'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          pull_number: { type: 'number', description: 'PR number.' },
+          pull_number: { type: 'number' },
         },
         additionalProperties: false,
       },
@@ -412,19 +493,19 @@ export const githubToolDefinitions = [
     type: 'function',
     function: {
       name: 'github_create_pull_request',
-      description: 'Open a pull request. Always write a clear description explaining what changed, why, and what to review.',
+      description: 'Open a pull request. Write a clear description with what changed, why, files affected, and how to test.',
       parameters: {
         type: 'object',
         required: ['title', 'head'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          title: { type: 'string', description: 'PR title.' },
-          body: { type: 'string', description: 'PR description in markdown. Include: what changed, why, files affected, and testing notes.' },
-          head: { type: 'string', description: 'Source branch name.' },
-          base: { type: 'string', description: 'Target branch. Defaults to repository default branch.' },
-          draft: { type: 'boolean', description: 'Open as draft PR for risky or incomplete changes.' },
+          title: { type: 'string' },
+          body: { type: 'string', description: 'PR description in markdown.' },
+          head: { type: 'string', description: 'Source branch.' },
+          base: { type: 'string', description: 'Target branch. Defaults to default branch.' },
+          draft: { type: 'boolean', description: 'Open as draft for risky or incomplete changes.' },
         },
         additionalProperties: false,
       },
@@ -434,41 +515,41 @@ export const githubToolDefinitions = [
     type: 'function',
     function: {
       name: 'github_add_pr_review',
-      description: 'Submit a review on a pull request with comments and an overall verdict (APPROVE, REQUEST_CHANGES, or COMMENT).',
+      description: 'Submit a review on a pull request (APPROVE, REQUEST_CHANGES, or COMMENT).',
       parameters: {
         type: 'object',
         required: ['pull_number', 'event'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           pull_number: { type: 'number' },
           body: { type: 'string', description: 'Overall review summary.' },
-          event: { type: 'string', enum: ['APPROVE', 'REQUEST_CHANGES', 'COMMENT'], description: 'Review verdict.' },
+          event: { type: 'string', enum: ['APPROVE', 'REQUEST_CHANGES', 'COMMENT'] },
         },
         additionalProperties: false,
       },
     },
   },
 
-  // ── Issues ────────────────────────────────────────────────────────────────
+  // Issues
   {
     type: 'function',
     function: {
       name: 'github_list_issues',
-      description: 'List issues in a repository. Use to find tasks to work on, bugs to fix, or track project health.',
+      description: 'List issues in a repository.',
       parameters: {
         type: 'object',
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           state: { type: 'string', enum: ['open', 'closed', 'all'], description: 'Defaults to open.' },
-          labels: { type: 'string', description: 'Comma-separated label names to filter by.' },
+          labels: { type: 'string', description: 'Comma-separated label names.' },
           assignee: { type: 'string', description: 'Filter by assignee login.' },
           sort: { type: 'string', enum: ['created', 'updated', 'comments'] },
           per_page: { type: 'number', minimum: 1, maximum: 100 },
-          since: { type: 'string', description: 'ISO 8601 date. Only issues updated after this date.' },
+          since: { type: 'string', description: 'ISO 8601 date.' },
         },
         additionalProperties: false,
       },
@@ -483,7 +564,7 @@ export const githubToolDefinitions = [
         type: 'object',
         required: ['issue_number'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           issue_number: { type: 'number' },
@@ -501,13 +582,13 @@ export const githubToolDefinitions = [
         type: 'object',
         required: ['title'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           title: { type: 'string' },
           body: { type: 'string', description: 'Issue description in markdown.' },
-          labels: { type: 'array', items: { type: 'string' }, description: 'Label names to apply.' },
-          assignees: { type: 'array', items: { type: 'string' }, description: 'GitHub logins to assign.' },
+          labels: { type: 'array', items: { type: 'string' } },
+          assignees: { type: 'array', items: { type: 'string' } },
         },
         additionalProperties: false,
       },
@@ -522,10 +603,10 @@ export const githubToolDefinitions = [
         type: 'object',
         required: ['issue_number', 'body'],
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
-          issue_number: { type: 'number', description: 'Issue or PR number (PRs are issues in GitHub API).' },
+          issue_number: { type: 'number', description: 'Issue or PR number.' },
           body: { type: 'string', description: 'Comment body in markdown.' },
         },
         additionalProperties: false,
@@ -533,16 +614,16 @@ export const githubToolDefinitions = [
     },
   },
 
-  // ── Clone / workspace ─────────────────────────────────────────────────────
+  // Clone / workspace
   {
     type: 'function',
     function: {
       name: 'github_clone_repository',
-      description: 'Clone a repository into an isolated temporary workspace on the server for deeper inspection or running commands. Use when you need the full codebase locally.',
+      description: 'Clone a repository into an isolated temporary workspace for deeper inspection.',
       parameters: {
         type: 'object',
         properties: {
-          repository: { type: 'string', description: 'Repository in owner/repo format.' },
+          repository: { type: 'string', description: 'owner/repo format.' },
           owner: { type: 'string' },
           repo: { type: 'string' },
           branch: { type: 'string', description: 'Branch to clone. Defaults to default branch.' },
@@ -552,6 +633,8 @@ export const githubToolDefinitions = [
     },
   },
 ];
+
+// ── Tool runner ────────────────────────────────────────────────────────────
 
 export async function runGitHubTool(token: string, name: string, args: Record<string, unknown>) {
   if (name === 'github_get_viewer') {
@@ -588,7 +671,6 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
       path: item.path,
       repository: (item.repository as Record<string, unknown>)?.full_name,
       html_url: item.html_url,
-      score: item.score,
     }));
   }
 
@@ -611,11 +693,6 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
     };
   }
 
-  if (name === 'github_list_branches') {
-    const perPage = Math.min(Number(args.per_page ?? 50), 100);
-    return githubFetch(token, `${repoPath(owner, repo)}/branches?per_page=${perPage}`);
-  }
-
   if (name === 'github_get_file_tree') {
     const branch = typeof args.branch === 'string' ? args.branch : undefined;
     let ref = branch;
@@ -624,10 +701,15 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
       ref = repository.default_branch;
     }
     const tree = await githubFetch<{ tree: Array<Record<string, unknown>>; truncated: boolean }>(token, `${repoPath(owner, repo)}/git/trees/${encodeURIComponent(ref)}?recursive=1`);
-    const files = tree.tree
-      .filter(item => item.type === 'blob')
-      .map(item => ({ path: item.path, size: item.size }));
+    const files = tree.tree.filter(item => item.type === 'blob').map(item => ({ path: item.path, size: item.size }));
     return { ref, truncated: tree.truncated, file_count: files.length, files };
+  }
+
+  if (name === 'github_list_directory') {
+    const dirPath = typeof args.path === 'string' ? args.path : '';
+    const ref = typeof args.ref === 'string' ? `?ref=${encodeURIComponent(args.ref)}` : '';
+    const listing = await githubFetch<Array<Record<string, unknown>>>(token, `${repoPath(owner, repo)}/contents/${encodePath(dirPath)}${ref}`);
+    return listing.map(item => ({ name: item.name, path: item.path, type: item.type, size: item.size, html_url: item.html_url }));
   }
 
   if (name === 'github_read_file') {
@@ -635,75 +717,14 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
     const ref = typeof args.ref === 'string' ? `?ref=${encodeURIComponent(args.ref)}` : '';
     const file = await githubFetch<{ content?: string; encoding?: string; name?: string; path?: string; sha?: string; html_url?: string }>(token, `${repoPath(owner, repo)}/contents/${encodePath(filePath)}${ref}`);
     if (!file.content || file.encoding !== 'base64') {
-      throw new Error('GitHub did not return a base64 encoded file.');
+      throw new Error('GitHub did not return a base64-encoded file.');
     }
-    return {
-      name: file.name,
-      path: file.path,
-      sha: file.sha,
-      html_url: file.html_url,
-      content: Buffer.from(file.content, 'base64').toString('utf8'),
-    };
+    return { name: file.name, path: file.path, sha: file.sha, html_url: file.html_url, content: Buffer.from(file.content, 'base64').toString('utf8') };
   }
 
-  if (name === 'github_list_directory') {
-    const dirPath = typeof args.path === 'string' ? args.path : '';
-    const ref = typeof args.ref === 'string' ? `?ref=${encodeURIComponent(args.ref)}` : '';
-    const listing = await githubFetch<Array<Record<string, unknown>>>(token, `${repoPath(owner, repo)}/contents/${encodePath(dirPath)}${ref}`);
-    return listing.map(item => ({
-      name: item.name,
-      path: item.path,
-      type: item.type,
-      size: item.size,
-      html_url: item.html_url,
-    }));
-  }
-
-  if (name === 'github_list_commits') {
-    const branch = typeof args.branch === 'string' ? args.branch : undefined;
-    const since = typeof args.since === 'string' ? args.since : undefined;
-    const author = typeof args.author === 'string' ? args.author : undefined;
-    const perPage = Math.min(Number(args.per_page ?? 20), 100);
-    const params = new URLSearchParams({ per_page: String(perPage) });
-    if (branch) params.set('sha', branch);
-    if (since) params.set('since', since);
-    if (author) params.set('author', author);
-    const commits = await githubFetch<Array<Record<string, unknown>>>(token, `${repoPath(owner, repo)}/commits?${params.toString()}`);
-    return commits.map(c => {
-      const commit = c.commit as Record<string, unknown>;
-      const author_info = commit.author as Record<string, unknown>;
-      const committer = c.committer as Record<string, unknown>;
-      return {
-        sha: (c.sha as string)?.slice(0, 8),
-        full_sha: c.sha,
-        message: (commit.message as string)?.split('\n')[0],
-        author: author_info?.name,
-        date: author_info?.date,
-        committer_login: committer?.login,
-        html_url: c.html_url,
-      };
-    });
-  }
-
-  if (name === 'github_get_commit') {
-    const sha = String(args.sha ?? '');
-    const commit = await githubFetch<Record<string, unknown>>(token, `${repoPath(owner, repo)}/commits/${encodeURIComponent(sha)}`);
-    const commitData = commit.commit as Record<string, unknown>;
-    const files = (commit.files as Array<Record<string, unknown>> | undefined) ?? [];
-    return {
-      sha: commit.sha,
-      message: (commitData.message as string),
-      author: (commitData.author as Record<string, unknown>),
-      stats: commit.stats,
-      files: files.map(f => ({
-        filename: f.filename,
-        status: f.status,
-        additions: f.additions,
-        deletions: f.deletions,
-        patch: (f.patch as string)?.slice(0, 3000),
-      })),
-      html_url: commit.html_url,
-    };
+  if (name === 'github_list_branches') {
+    const perPage = Math.min(Number(args.per_page ?? 50), 100);
+    return githubFetch(token, `${repoPath(owner, repo)}/branches?per_page=${perPage}`);
   }
 
   if (name === 'github_create_branch') {
@@ -718,6 +739,47 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
     });
   }
 
+  if (name === 'github_list_commits') {
+    const branch = typeof args.branch === 'string' ? args.branch : undefined;
+    const since = typeof args.since === 'string' ? args.since : undefined;
+    const author = typeof args.author === 'string' ? args.author : undefined;
+    const perPage = Math.min(Number(args.per_page ?? 20), 100);
+    const params = new URLSearchParams({ per_page: String(perPage) });
+    if (branch) params.set('sha', branch);
+    if (since) params.set('since', since);
+    if (author) params.set('author', author);
+    const commits = await githubFetch<Array<Record<string, unknown>>>(token, `${repoPath(owner, repo)}/commits?${params.toString()}`);
+    return commits.map((c) => {
+      const commit = c.commit as Record<string, unknown>;
+      const authorInfo = commit.author as Record<string, unknown>;
+      const committer = c.committer as Record<string, unknown>;
+      return {
+        sha: (c.sha as string)?.slice(0, 8),
+        full_sha: c.sha,
+        message: (commit.message as string)?.split('\n')[0],
+        author: authorInfo?.name,
+        date: authorInfo?.date,
+        committer_login: committer?.login,
+        html_url: c.html_url,
+      };
+    });
+  }
+
+  if (name === 'github_get_commit') {
+    const sha = String(args.sha ?? '');
+    const commit = await githubFetch<Record<string, unknown>>(token, `${repoPath(owner, repo)}/commits/${encodeURIComponent(sha)}`);
+    const commitData = commit.commit as Record<string, unknown>;
+    const files = (commit.files as Array<Record<string, unknown>> | undefined) ?? [];
+    return {
+      sha: commit.sha,
+      message: commitData.message,
+      author: commitData.author,
+      stats: commit.stats,
+      files: files.map(f => ({ filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions, patch: (f.patch as string)?.slice(0, 3000) })),
+      html_url: commit.html_url,
+    };
+  }
+
   if (name === 'github_upsert_file') {
     const filePath = String(args.path ?? '');
     const branch = String(args.branch ?? '');
@@ -727,12 +789,7 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
     const sha = await readFileSha(token, owner, repo, filePath, branch);
     return githubFetch(token, `${repoPath(owner, repo)}/contents/${encodePath(filePath)}`, {
       method: 'PUT',
-      body: JSON.stringify({
-        message,
-        content: Buffer.from(content, 'utf8').toString('base64'),
-        branch,
-        ...(sha ? { sha } : {}),
-      }),
+      body: JSON.stringify({ message, content: Buffer.from(content, 'utf8').toString('base64'), branch, ...(sha ? { sha } : {}) }),
     });
   }
 
@@ -788,8 +845,6 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
       changed_files: pr.changed_files,
       requested_reviewers: (pr.requested_reviewers as Array<Record<string, unknown>>)?.map(r => r.login),
       labels: (pr.labels as Array<Record<string, unknown>>)?.map(l => l.name),
-      created_at: pr.created_at,
-      updated_at: pr.updated_at,
       user: (pr.user as Record<string, unknown>)?.login,
     };
   }
@@ -797,11 +852,7 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
   if (name === 'github_get_pr_diff') {
     const pullNumber = Number(args.pull_number);
     const res = await fetch(`${GITHUB_API}${repoPath(owner, repo)}/pulls/${pullNumber}`, {
-      headers: {
-        Accept: 'application/vnd.github.diff',
-        Authorization: `Bearer ${token}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
+      headers: { Accept: 'application/vnd.github.diff', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
     });
     if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
     const diff = await res.text();
@@ -826,10 +877,7 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
     const pullNumber = Number(args.pull_number);
     return githubFetch(token, `${repoPath(owner, repo)}/pulls/${pullNumber}/reviews`, {
       method: 'POST',
-      body: JSON.stringify({
-        body: String(args.body ?? ''),
-        event: String(args.event ?? 'COMMENT'),
-      }),
+      body: JSON.stringify({ body: String(args.body ?? ''), event: String(args.event ?? 'COMMENT') }),
     });
   }
 
@@ -869,8 +917,6 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
       html_url: issue.html_url,
       labels: (issue.labels as Array<Record<string, unknown>>)?.map(l => l.name),
       assignees: (issue.assignees as Array<Record<string, unknown>>)?.map(a => a.login),
-      created_at: issue.created_at,
-      updated_at: issue.updated_at,
       user: (issue.user as Record<string, unknown>)?.login,
       comments: issue.comments,
     };

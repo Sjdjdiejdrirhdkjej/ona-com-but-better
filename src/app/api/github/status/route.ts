@@ -1,12 +1,12 @@
-import { getGitHubConfig, getGitHubToken, getGitHubViewer } from '@/libs/GitHub';
+import { getGitHubToken, getGitHubViewer, isGitHubConfigured } from '@/libs/GitHub';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
-  const config = getGitHubConfig();
+  const configured = isGitHubConfigured();
   const token = await getGitHubToken();
 
-  if (!config.configured) {
+  if (!configured) {
     return Response.json({ configured: false, connected: false });
   }
 
