@@ -77,6 +77,8 @@ const TOOL_LABELS: Record<string, string> = {
   github_get_pr_diff: 'Reading PR diff',
   github_create_pull_request: 'Creating pull request',
   github_add_pr_review: 'Submitting PR review',
+  github_add_pr_reviewers: 'Requesting PR reviewers',
+  github_add_pr_labels: 'Applying PR labels',
   github_list_issues: 'Listing issues',
   github_get_issue: 'Reading issue',
   github_create_issue: 'Creating issue',

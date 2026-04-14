@@ -532,6 +532,46 @@ export const githubToolDefinitions = [
     },
   },
 
+  {
+    type: 'function',
+    function: {
+      name: 'github_add_pr_reviewers',
+      description: 'Request one or more reviewers on a pull request.',
+      parameters: {
+        type: 'object',
+        required: ['pull_number', 'reviewers'],
+        properties: {
+          repository: { type: 'string', description: 'owner/repo format.' },
+          owner: { type: 'string' },
+          repo: { type: 'string' },
+          pull_number: { type: 'number' },
+          reviewers: { type: 'array', items: { type: 'string' }, description: 'GitHub usernames to request as reviewers.' },
+          team_reviewers: { type: 'array', items: { type: 'string' }, description: 'Team slugs to request as reviewers.' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'github_add_pr_labels',
+      description: 'Add one or more labels to a pull request. Labels must already exist in the repository.',
+      parameters: {
+        type: 'object',
+        required: ['pull_number', 'labels'],
+        properties: {
+          repository: { type: 'string', description: 'owner/repo format.' },
+          owner: { type: 'string' },
+          repo: { type: 'string' },
+          pull_number: { type: 'number' },
+          labels: { type: 'array', items: { type: 'string' }, description: 'Label names to apply to the pull request.' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+
   // Issues
   {
     type: 'function',
@@ -879,6 +919,34 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
       method: 'POST',
       body: JSON.stringify({ body: String(args.body ?? ''), event: String(args.event ?? 'COMMENT') }),
     });
+  }
+
+  if (name === 'github_add_pr_reviewers') {
+    const pullNumber = Number(args.pull_number);
+    const reviewers = Array.isArray(args.reviewers) ? args.reviewers : [];
+    const teamReviewers = Array.isArray(args.team_reviewers) ? args.team_reviewers : [];
+    const result = await githubFetch<Record<string, unknown>>(token, `${repoPath(owner, repo)}/pulls/${pullNumber}/requested_reviewers`, {
+      method: 'POST',
+      body: JSON.stringify({ reviewers, team_reviewers: teamReviewers }),
+    });
+    return {
+      pull_number: pullNumber,
+      requested_reviewers: (result.requested_reviewers as Array<Record<string, unknown>>)?.map(r => r.login),
+      requested_teams: (result.requested_teams as Array<Record<string, unknown>>)?.map(t => t.slug),
+    };
+  }
+
+  if (name === 'github_add_pr_labels') {
+    const pullNumber = Number(args.pull_number);
+    const labels = Array.isArray(args.labels) ? args.labels : [];
+    const result = await githubFetch<Array<Record<string, unknown>>>(token, `${repoPath(owner, repo)}/issues/${pullNumber}/labels`, {
+      method: 'POST',
+      body: JSON.stringify({ labels }),
+    });
+    return {
+      pull_number: pullNumber,
+      labels: result.map(l => l.name),
+    };
   }
 
   if (name === 'github_list_issues') {
