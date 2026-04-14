@@ -28,11 +28,22 @@ type Conversation = {
   createdAt: number;
 };
 
+type GitHubStatus = {
+  configured: boolean;
+  connected: boolean;
+  user?: {
+    login: string;
+    avatar_url?: string;
+    html_url?: string;
+  };
+  error?: string;
+};
+
 const SUGGESTIONS = [
-  'Weekly digest of changed files',
-  'Review open pull requests',
+  'Inspect my repos and suggest agent tasks',
+  'Clone a repo and open a docs sync PR',
+  'Review open pull requests in GitHub',
   'Find and fix CVEs in my repos',
-  'Migrate a COBOL service to Java',
 ];
 
 function relativeTime(ts: number) {
@@ -215,6 +226,7 @@ export default function AppPage() {
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [search, setSearch] = useState('');
+  const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -255,6 +267,24 @@ export default function AppPage() {
     }
     loadHistory();
   }, []);
+
+  useEffect(() => {
+    async function loadGitHubStatus() {
+      try {
+        const res = await fetch('/api/github/status');
+        const data = await res.json() as GitHubStatus;
+        setGithubStatus(data);
+      } catch {
+        setGithubStatus({ configured: false, connected: false });
+      }
+    }
+    loadGitHubStatus();
+  }, []);
+
+  async function disconnectGitHub() {
+    await fetch('/api/github/logout', { method: 'POST' });
+    setGithubStatus(prev => ({ configured: prev?.configured ?? true, connected: false }));
+  }
 
   // Detect mobile vs desktop and set sidebar default
   useEffect(() => {
@@ -645,15 +675,50 @@ export default function AppPage() {
             ONA
           </Link>
         </div>
-        <button
-          onClick={createNewChat}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-black/6 hover:text-gray-900 active:bg-black/10"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-          <span className="hidden sm:inline">New task</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {githubStatus?.connected
+            ? (
+                <button
+                  onClick={disconnectGitHub}
+                  title={`Connected as ${githubStatus.user?.login ?? 'GitHub user'}. Click to disconnect.`}
+                  className="flex items-center gap-2 rounded-lg border border-black/10 bg-white/60 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-black/6 hover:text-gray-950 active:bg-black/10"
+                >
+                  {githubStatus.user?.avatar_url
+                    ? <img src={githubStatus.user.avatar_url} alt="" className="size-5 rounded-full" />
+                    : (
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.77.4.08.55-.18.55-.4 0-.2-.01-.86-.01-1.56-2.01.38-2.53-.5-2.69-.95-.09-.23-.48-.95-.82-1.14-.28-.16-.68-.55-.01-.56.63-.01 1.08.59 1.23.83.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.37 7.37 0 018 3.95c.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.25.54.74.54 1.5 0 1.09-.01 1.96-.01 2.23 0 .22.15.48.55.4A8.13 8.13 0 0016 8.2C16 3.67 12.42 0 8 0z" />
+                        </svg>
+                      )}
+                  <span className="hidden sm:inline">{githubStatus.user?.login ?? 'GitHub connected'}</span>
+                </button>
+              )
+            : (
+                <a
+                  href="/api/github/auth"
+                  className={`flex items-center gap-2 rounded-lg border border-black/10 px-3 py-2 text-sm transition-colors ${
+                    githubStatus?.configured === false
+                      ? 'pointer-events-none bg-gray-100 text-gray-400'
+                      : 'bg-gray-950 text-white hover:opacity-85 active:opacity-75'
+                  }`}
+                  title={githubStatus?.configured === false ? 'GitHub OAuth needs app credentials first.' : 'Connect GitHub to let Ona inspect repos and open PRs.'}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.77.4.08.55-.18.55-.4 0-.2-.01-.86-.01-1.56-2.01.38-2.53-.5-2.69-.95-.09-.23-.48-.95-.82-1.14-.28-.16-.68-.55-.01-.56.63-.01 1.08.59 1.23.83.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.37 7.37 0 018 3.95c.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.25.54.74.54 1.5 0 1.09-.01 1.96-.01 2.23 0 .22.15.48.55.4A8.13 8.13 0 0016 8.2C16 3.67 12.42 0 8 0z" />
+                  </svg>
+                  <span className="hidden sm:inline">Connect GitHub</span>
+                </a>
+              )}
+          <button
+            onClick={createNewChat}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-black/6 hover:text-gray-900 active:bg-black/10"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            <span className="hidden sm:inline">New task</span>
+          </button>
+        </div>
       </header>
 
       {/* ── Body ── */}
@@ -696,8 +761,13 @@ export default function AppPage() {
                       What should Ona do?
                     </h1>
                     <p className="mb-7 max-w-xs text-sm text-gray-500 sm:max-w-sm">
-                      Describe a task and a background agent will execute it end-to-end, then open a pull request.
+                      Connect GitHub, describe a task, and a background agent can inspect repos, create a branch, commit changes, and open a pull request.
                     </p>
+                    {githubStatus?.configured === false && (
+                      <p className="mb-4 max-w-sm rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                        GitHub OAuth needs GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET before users can connect their repositories.
+                      </p>
+                    )}
                     <div className="flex flex-wrap justify-center gap-2">
                       {SUGGESTIONS.map(s => (
                         <button
