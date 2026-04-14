@@ -107,6 +107,45 @@ function AssistantMarkdown({ text }: { text: string }) {
   );
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      aria-label={copied ? 'Copied!' : 'Copy message'}
+      className="copy-btn mt-1 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-gray-400 opacity-0 transition-all hover:bg-black/5 hover:text-gray-600 group-hover:opacity-100"
+    >
+      {copied
+        ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Copied
+            </>
+          )
+        : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <rect x="4" y="1" width="7" height="8" rx="1" stroke="currentColor" strokeWidth="1.2" />
+                <path d="M1 4v6a1 1 0 001 1h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+              </svg>
+              Copy
+            </>
+          )}
+    </button>
+  );
+}
+
 function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user';
   const text = typeof msg.content === 'string'
@@ -114,7 +153,7 @@ function MessageBubble({ msg }: { msg: Message }) {
     : (msg.content.find(p => p.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '';
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && <OnaAvatar />}
       <div className="max-w-[85%] space-y-2 sm:max-w-[80%]">
         {msg.imagePreview && (
@@ -134,6 +173,7 @@ function MessageBubble({ msg }: { msg: Message }) {
         >
           {isUser ? text : <AssistantMarkdown text={text} />}
         </div>
+        {!isUser && text && <CopyButton text={text} />}
       </div>
     </div>
   );
@@ -759,6 +799,7 @@ export default function AppPage() {
         }
         @media (hover: none) {
           .delete-btn { opacity: 1 !important; }
+          .copy-btn { opacity: 1 !important; }
         }
       `}
       </style>
