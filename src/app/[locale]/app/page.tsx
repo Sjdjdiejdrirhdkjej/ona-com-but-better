@@ -271,21 +271,30 @@ function MessageBubble({ msg }: { msg: Message }) {
   );
 }
 
-function TypingIndicator() {
+function TypingIndicator({ tools }: { tools?: string[] }) {
+  const label = tools && tools.length > 0
+    ? tools.slice(0, 2).join(' · ') + (tools.length > 2 ? ` +${tools.length - 2}` : '')
+    : null;
+
   return (
     <div className="flex justify-start">
       <OnaAvatar />
       <div
-        className="flex items-center gap-1 rounded-2xl rounded-tl-sm border border-gray-200 px-4 py-3"
+        className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-gray-200 px-4 py-3"
         style={{ backgroundColor: '#eceae4' }}
       >
-        {[0, 1, 2].map(i => (
-          <span
-            key={i}
-            className="size-1.5 rounded-full bg-gray-400"
-            style={{ animation: `ona-pulse 1s ease-in-out ${i * 0.2}s infinite` }}
-          />
-        ))}
+        <span className="flex items-center gap-1">
+          {[0, 1, 2].map(i => (
+            <span
+              key={i}
+              className="size-1.5 rounded-full bg-gray-400"
+              style={{ animation: `ona-pulse 1s ease-in-out ${i * 0.2}s infinite` }}
+            />
+          ))}
+        </span>
+        {label && (
+          <span className="text-xs text-gray-500">{label}…</span>
+        )}
       </div>
     </div>
   );
@@ -307,6 +316,7 @@ export default function AppPage() {
   const [search, setSearch] = useState('');
   const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null);
   const [deviceAuth, setDeviceAuth] = useState<DeviceAuthState | null>(null);
+  const [activeTools, setActiveTools] = useState<string[]>([]);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -615,8 +625,22 @@ export default function AppPage() {
           const data = line.slice(6).trim();
           if (data === '[DONE]') break;
           try {
-            const { delta } = JSON.parse(data) as { delta: string };
-            if (delta) {
+            const json = JSON.parse(data) as {
+              delta?: string;
+              type?: string;
+              tools?: string[];
+              message?: string;
+            };
+
+            if (json.type === 'tool_call' && json.tools?.length) {
+              setActiveTools(json.tools);
+            } else if (json.type === 'tool_done') {
+              setActiveTools([]);
+            } else if (json.type === 'error' && json.message) {
+              throw new Error(json.message);
+            } else if (json.delta) {
+              setActiveTools([]);
+              const delta = json.delta;
               assistantText += delta;
               setConversations(prev =>
                 prev.map(c =>
@@ -633,7 +657,9 @@ export default function AppPage() {
                 ),
               );
             }
-          } catch {}
+          } catch (e) {
+            if (e instanceof Error && e.message !== 'Unexpected token') throw e;
+          }
         }
       }
     } catch (err) {
@@ -654,6 +680,7 @@ export default function AppPage() {
       );
     } finally {
       setLoading(false);
+      setActiveTools([]);
     }
 
     // Save assistant message
@@ -942,7 +969,7 @@ export default function AppPage() {
                     {messages.map(msg => (
                       <MessageBubble key={msg.id} msg={msg} />
                     ))}
-                    {loading && messages.at(-1)?.role !== 'assistant' && <TypingIndicator />}
+                    {loading && messages.at(-1)?.role !== 'assistant' && <TypingIndicator tools={activeTools} />}
                     <div ref={bottomRef} />
                   </div>
                 )}

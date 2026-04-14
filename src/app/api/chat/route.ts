@@ -39,7 +39,7 @@ You are built to handle these types of tasks autonomously:
 - Patch version pins, open a PR with the remediation.
 
 **Weekly digest**
-- Use github_list_commits with a `since` date to summarize what changed in a repo over the past week.
+- Use github_list_commits with a \`since\` date to summarize what changed in a repo over the past week.
 - Include: features merged, bugs fixed, open PRs, and notable contributors.
 
 **Documentation sync**
@@ -58,6 +58,35 @@ You are built to handle these types of tasks autonomously:
 - Always write PR bodies in markdown with: **What changed**, **Why**, **Files affected**, **How to test**.
 - After completing a task, summarize: what you did, what PR was opened (with URL), and what needs human review.
 - If a task is too large for one pass, break it into sub-tasks and ask the user which to tackle first.`;
+
+const TOOL_LABELS: Record<string, string> = {
+  github_get_viewer: 'Checking GitHub identity',
+  github_list_repositories: 'Listing repositories',
+  github_get_repository: 'Reading repository',
+  github_get_file_tree: 'Mapping codebase',
+  github_read_file: 'Reading file',
+  github_upsert_file: 'Writing file',
+  github_delete_file: 'Deleting file',
+  github_search_code: 'Searching code',
+  github_list_branches: 'Listing branches',
+  github_create_branch: 'Creating branch',
+  github_list_commits: 'Reading commit history',
+  github_get_commit: 'Reading commit',
+  github_list_pull_requests: 'Listing pull requests',
+  github_get_pull_request: 'Reading pull request',
+  github_get_pr_diff: 'Reading PR diff',
+  github_create_pull_request: 'Creating pull request',
+  github_add_pr_review: 'Submitting PR review',
+  github_list_issues: 'Listing issues',
+  github_get_issue: 'Reading issue',
+  github_create_issue: 'Creating issue',
+  github_add_comment: 'Adding comment',
+  github_clone_repo: 'Cloning repository',
+};
+
+function toolLabel(name: string): string {
+  return TOOL_LABELS[name] ?? name.replace('github_', '').replace(/_/g, ' ');
+}
 
 type ContentPart =
   | { type: 'text'; text: string }
@@ -89,117 +118,63 @@ type FireworksResponse = {
   choices?: Array<{
     message?: FireworksMessage;
     delta?: { content?: string };
+    finish_reason?: string;
   }>;
+  error?: { message?: string };
 };
 
 function normalizeMessages(messages: ApiMessage[]) {
   return messages.map((m) => {
-    if (Array.isArray(m.content)) {
-      return m;
-    }
+    if (Array.isArray(m.content)) return m;
     return { role: m.role, content: m.content };
   });
 }
 
-async function callFireworks(body: Record<string, unknown>) {
+async function callFireworks(body: Record<string, unknown>, retries = 3): Promise<Response> {
   if (!process.env.FIREWORKS_API_KEY) {
-    throw new Error('FIREWORKS_API_KEY is not configured. Please add it to your environment secrets.');
+    throw new Error('FIREWORKS_API_KEY is not configured. Please add it in environment secrets.');
   }
 
-  const res = await fetch(FIREWORKS_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.FIREWORKS_API_KEY}`,
-    },
-    body: JSON.stringify({ model: MODEL, ...body }),
-  });
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(error);
+  for (let attempt = 0; attempt < retries; attempt++) {
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+
+    const res = await fetch(FIREWORKS_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.FIREWORKS_API_KEY}`,
+      },
+      body: JSON.stringify({ model: MODEL, ...body }),
+    });
+
+    if (res.ok) return res;
+
+    if (res.status === 429 || res.status >= 500) {
+      const text = await res.text();
+      lastError = new Error(`The AI model is temporarily busy (${res.status}). Please try again in a moment.`);
+      if (res.status === 429 || res.status === 503) {
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+      }
+      continue;
+    }
+
+    const text = await res.text();
+    let message = text;
+    try {
+      const json = JSON.parse(text) as { error?: { message?: string } };
+      if (json.error?.message) message = json.error.message;
+    } catch {}
+    throw new Error(message);
   }
 
-  return res;
+  throw lastError ?? new Error('Request failed after multiple attempts. Please try again.');
 }
 
-function streamText(text: string) {
-  const encoder = new TextEncoder();
-  const chunks = text.match(/[\s\S]{1,80}/g) ?? [''];
-
-  const stream = new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: chunk })}\n\n`));
-      }
-      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-      controller.close();
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    },
-  });
-}
-
-async function streamFireworks(messages: ApiMessage[]) {
-  const fireworksRes = await callFireworks({
-    messages,
-    stream: true,
-    max_tokens: 1600,
-    temperature: 0.45,
-  });
-
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      const reader = fireworksRes.body!.getReader();
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
-
-          for (const line of lines) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') {
-              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-              break;
-            }
-            try {
-              const json = JSON.parse(data) as FireworksResponse;
-              const delta = json.choices?.[0]?.delta?.content;
-              if (delta) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
-              }
-            } catch {}
-          }
-        }
-      } finally {
-        controller.close();
-        reader.releaseLock();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    },
-  });
-}
-
-function parseToolArgs(value: string) {
+function parseToolArgs(value: string): Record<string, unknown> {
   try {
     return JSON.parse(value || '{}') as Record<string, unknown>;
   } catch {
@@ -207,73 +182,144 @@ function parseToolArgs(value: string) {
   }
 }
 
+function makeStream() {
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+
+  function emit(payload: Record<string, unknown> | string) {
+    const line = typeof payload === 'string'
+      ? `data: ${payload}\n\n`
+      : `data: ${JSON.stringify(payload)}\n\n`;
+    writer.write(encoder.encode(line)).catch(() => {});
+  }
+
+  function close() {
+    emit('[DONE]');
+    writer.close().catch(() => {});
+  }
+
+  return { readable, emit, close };
+}
+
 export async function POST(req: NextRequest) {
-  try {
-    const { messages } = await req.json() as { messages: ApiMessage[] };
-    const githubToken = await getGitHubToken();
-    const conversation: ApiMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...normalizeMessages(messages),
-    ];
+  const { readable, emit, close } = makeStream();
 
-    if (!githubToken) {
-      conversation.splice(1, 0, {
-        role: 'user',
-        content: 'GitHub is not connected for this user. If they ask for any repository action (listing repos, reading files, creating branches, making commits, opening PRs, reviewing code), tell them to connect their GitHub account using the "Connect GitHub" button first. You can still help with general coding questions and planning.',
-      });
-      return streamFireworks(conversation);
-    }
+  const headers = {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  };
 
-    const MAX_TOOL_ITERATIONS = 10;
-    for (let i = 0; i < MAX_TOOL_ITERATIONS; i += 1) {
-      const res = await callFireworks({
-        messages: conversation,
-        tools: githubToolDefinitions,
-        tool_choice: 'auto',
-        stream: false,
-        max_tokens: 1400,
-        temperature: 0.3,
-      });
-      const data = await res.json() as FireworksResponse;
-      const message = data.choices?.[0]?.message;
+  (async () => {
+    try {
+      const { messages } = await req.json() as { messages: ApiMessage[] };
+      const githubToken = await getGitHubToken();
 
-      if (!message?.tool_calls?.length) {
-        return streamText(message?.content ?? 'I could not produce a response.');
+      const conversation: ApiMessage[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...normalizeMessages(messages),
+      ];
+
+      if (!githubToken) {
+        conversation.splice(1, 0, {
+          role: 'user',
+          content: 'GitHub is not connected for this user. If they ask for any repository action, tell them to connect their GitHub account using the "Connect GitHub" button first. You can still help with general coding questions and planning.',
+        });
+
+        const fireworksRes = await callFireworks({
+          messages: conversation,
+          stream: true,
+          max_tokens: 1600,
+          temperature: 0.45,
+        });
+
+        const decoder = new TextDecoder();
+        const reader = fireworksRes.body!.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            for (const line of chunk.split('\n')) {
+              if (!line.startsWith('data: ')) continue;
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') break;
+              try {
+                const json = JSON.parse(data) as FireworksResponse;
+                const delta = json.choices?.[0]?.delta?.content;
+                if (delta) emit({ delta });
+              } catch {}
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        return;
       }
 
-      conversation.push({
-        role: 'assistant',
-        content: message.content ?? '',
-        tool_calls: message.tool_calls,
-      });
+      const MAX_TOOL_ITERATIONS = 10;
 
-      await Promise.all(
-        message.tool_calls.map(async (toolCall) => {
-          try {
-            const result = await runGitHubTool(githubToken, toolCall.function.name, parseToolArgs(toolCall.function.arguments));
-            conversation.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(result).slice(0, 24000),
-            });
-          } catch (error) {
-            conversation.push({
-              role: 'tool',
-              tool_call_id: toolCall.id,
-              content: JSON.stringify({ error: (error as Error).message }),
-            });
-          }
-        }),
-      );
+      for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+        const res = await callFireworks({
+          messages: conversation,
+          tools: githubToolDefinitions,
+          tool_choice: 'auto',
+          stream: false,
+          max_tokens: 1400,
+          temperature: 0.3,
+        });
+
+        const data = await res.json() as FireworksResponse;
+        const message = data.choices?.[0]?.message;
+
+        if (!message?.tool_calls?.length) {
+          const text = message?.content ?? 'I could not produce a response.';
+          const chunks = text.match(/[\s\S]{1,80}/g) ?? [''];
+          for (const chunk of chunks) emit({ delta: chunk });
+          break;
+        }
+
+        const labels = message.tool_calls.map(t => toolLabel(t.function.name));
+        emit({ type: 'tool_call', tools: labels });
+
+        conversation.push({
+          role: 'assistant',
+          content: message.content ?? '',
+          tool_calls: message.tool_calls,
+        });
+
+        await Promise.all(
+          message.tool_calls.map(async (toolCall) => {
+            try {
+              const result = await runGitHubTool(
+                githubToken,
+                toolCall.function.name,
+                parseToolArgs(toolCall.function.arguments),
+              );
+              conversation.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify(result).slice(0, 24000),
+              });
+            } catch (error) {
+              conversation.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: JSON.stringify({ error: (error as Error).message }),
+              });
+            }
+          }),
+        );
+
+        emit({ type: 'tool_done' });
+      }
+    } catch (error) {
+      emit({ type: 'error', message: (error as Error).message });
+    } finally {
+      close();
     }
+  })();
 
-    conversation.push({
-      role: 'user',
-      content: 'Summarize all GitHub work completed so far. List any PR URLs opened, files changed, and what still requires human review or a follow-up task.',
-    });
-
-    return streamFireworks(conversation);
-  } catch (error) {
-    return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500 });
-  }
+  return new Response(readable, { headers });
 }
