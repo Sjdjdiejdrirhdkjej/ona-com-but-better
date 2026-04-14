@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 
 const SERIF = 'Georgia, "Times New Roman", serif';
-const BG = '#f7f6f2';
-const SIDEBAR_BG = '#edecea';
 
 type ContentPart =
   | { type: 'text'; text: string }
@@ -101,12 +100,12 @@ function AssistantMarkdown({ text }: { text: string }) {
                 </code>
               )
             : (
-                <code className="rounded bg-black/10 px-1 py-0.5 font-mono text-xs">{children}</code>
+                <code className="rounded bg-black/10 dark:bg-white/10 px-1 py-0.5 font-mono text-xs">{children}</code>
               );
         },
         pre: ({ children }) => <pre className="mb-2 mt-1 overflow-hidden rounded-lg">{children}</pre>,
         blockquote: ({ children }) => (
-          <blockquote className="mb-2 border-l-2 border-gray-400 pl-3 italic text-gray-600">
+          <blockquote className="mb-2 border-l-2 border-gray-400 dark:border-gray-500 pl-3 italic text-gray-600 dark:text-gray-400">
             {children}
           </blockquote>
         ),
@@ -115,14 +114,14 @@ function AssistantMarkdown({ text }: { text: string }) {
             {children}
           </a>
         ),
-        hr: () => <hr className="my-2 border-gray-300" />,
+        hr: () => <hr className="my-2 border-gray-300 dark:border-gray-600" />,
         table: ({ children }) => (
           <div className="mb-2 overflow-x-auto">
             <table className="min-w-full text-xs">{children}</table>
           </div>
         ),
-        th: ({ children }) => <th className="border border-gray-300 px-2 py-1 text-left font-semibold">{children}</th>,
-        td: ({ children }) => <td className="border border-gray-300 px-2 py-1">{children}</td>,
+        th: ({ children }) => <th className="border border-gray-300 dark:border-gray-600 px-2 py-1 text-left font-semibold">{children}</th>,
+        td: ({ children }) => <td className="border border-gray-300 dark:border-gray-600 px-2 py-1">{children}</td>,
       }}
     >
       {text}
@@ -145,7 +144,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       aria-label={copied ? 'Copied!' : 'Copy message'}
-      className="copy-btn mt-1 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-gray-400 opacity-0 transition-all hover:bg-black/5 hover:text-gray-600 group-hover:opacity-100"
+      className="copy-btn mt-1 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-gray-400 dark:text-gray-500 opacity-0 transition-all hover:bg-black/5 dark:hover:bg-white/8 hover:text-gray-600 dark:hover:text-gray-300 group-hover:opacity-100"
     >
       {copied
         ? (
@@ -183,7 +182,7 @@ function CopyDeviceCode({ code }: { code: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 py-1.5 text-xs text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-800"
+      className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 dark:border-gray-700 py-1.5 text-xs text-gray-500 dark:text-gray-400 transition-colors hover:border-gray-400 hover:text-gray-800 dark:hover:text-gray-100"
     >
       {copied
         ? (
@@ -252,16 +251,16 @@ function MessageBubble({ msg }: { msg: Message }) {
           <img
             src={msg.imagePreview}
             alt="Uploaded"
-            className="max-h-48 w-full rounded-xl border border-gray-200 object-cover"
+            className="max-h-48 w-full rounded-xl border border-gray-200 dark:border-gray-700 object-cover"
           />
         )}
         <div
           className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
             isUser
               ? 'rounded-tr-sm bg-gray-900 text-white whitespace-pre-wrap'
-              : 'rounded-tl-sm border border-gray-200 text-gray-800'
+              : 'rounded-tl-sm border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200'
           }`}
-          style={!isUser ? { backgroundColor: '#eceae4' } : {}}
+          style={!isUser ? { backgroundColor: 'var(--bg-2)' } : {}}
         >
           {isUser ? text : <AssistantMarkdown text={text} />}
         </div>
@@ -280,8 +279,8 @@ function TypingIndicator({ tools }: { tools?: string[] }) {
     <div className="flex justify-start">
       <OnaAvatar />
       <div
-        className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-gray-200 px-4 py-3"
-        style={{ backgroundColor: '#eceae4' }}
+        className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-gray-200 dark:border-gray-700 px-4 py-3"
+        style={{ backgroundColor: 'var(--bg-2)' }}
       >
         <span className="flex items-center gap-1">
           {[0, 1, 2].map(i => (
@@ -293,7 +292,7 @@ function TypingIndicator({ tools }: { tools?: string[] }) {
           ))}
         </span>
         {label && (
-          <span className="text-xs text-gray-500">{label}…</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">{label}…</span>
         )}
       </div>
     </div>
@@ -736,8 +735,8 @@ export default function AppPage() {
       <div className="shrink-0 px-3 pt-4 pb-2 space-y-2">
         <button
           onClick={createNewChat}
-          className="flex w-full items-center gap-2 rounded-xl border border-black/8 px-3 py-3 text-sm font-medium text-gray-700 transition-colors hover:bg-black/6 active:bg-black/10"
-          style={{ backgroundColor: 'rgba(255,255,255,0.5)' }}
+          className="flex w-full items-center gap-2 rounded-xl border border-black/8 dark:border-white/8 px-3 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 transition-colors hover:bg-black/6 dark:hover:bg-white/8 active:bg-black/10 dark:active:bg-white/10"
+          style={{ backgroundColor: 'var(--bg-card)' }}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -760,12 +759,12 @@ export default function AppPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search tasks…"
-            className="w-full rounded-lg border border-black/8 bg-white/60 py-1.5 pl-7 pr-3 text-sm text-gray-800 placeholder-gray-400 outline-none focus:border-gray-300 focus:bg-white transition-colors"
+            className="w-full rounded-lg border border-black/8 dark:border-white/8 bg-white/60 dark:bg-white/5 py-1.5 pl-7 pr-3 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-gray-300 dark:focus:border-gray-600 focus:bg-white dark:focus:bg-white/8 transition-colors"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
               aria-label="Clear search"
             >
               <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
@@ -779,7 +778,7 @@ export default function AppPage() {
       <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-0.5">
         {loadingHistory
           ? (
-              <div className="px-3 py-4 text-xs text-gray-400">Loading history…</div>
+              <div className="px-3 py-4 text-xs text-gray-400 dark:text-gray-500">Loading history…</div>
             )
           : (() => {
               const q = search.trim().toLowerCase();
@@ -795,7 +794,7 @@ export default function AppPage() {
               });
               if (filtered.length === 0) {
                 return (
-                  <div className="px-3 py-4 text-xs text-gray-400">
+                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-gray-500">
                     {q ? 'No tasks match your search.' : 'No tasks yet.'}
                   </div>
                 );
@@ -805,8 +804,8 @@ export default function AppPage() {
               key={c.id}
               className={`group relative flex w-full items-start rounded-xl px-3 py-3 text-left transition-colors ${
                 c.id === activeId
-                  ? 'bg-black/8 text-gray-900'
-                  : 'text-gray-600 hover:bg-black/5 hover:text-gray-900 active:bg-black/8'
+                  ? 'bg-black/8 dark:bg-white/10 text-gray-900 dark:text-gray-100'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/8 dark:active:bg-white/10'
               }`}
             >
               <button
@@ -815,11 +814,11 @@ export default function AppPage() {
                 aria-label={`Switch to task: ${c.title}`}
               >
                 <p className="truncate pr-6 text-sm font-medium leading-tight">{c.title}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{relativeTime(c.createdAt)}</p>
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{relativeTime(c.createdAt)}</p>
               </button>
               <button
                 onClick={e => deleteConversation(c.id, e)}
-                className="delete-btn absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 opacity-0 transition-opacity hover:text-gray-600 group-hover:opacity-100"
+                className="delete-btn absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 dark:text-gray-600 opacity-0 transition-opacity hover:text-gray-600 dark:hover:text-gray-400 group-hover:opacity-100"
                 aria-label="Delete task"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -831,23 +830,23 @@ export default function AppPage() {
             })()}
       </div>
 
-      <div className="shrink-0 border-t border-black/8 px-3 py-3">
-        <p className="text-xs text-gray-400">Powered by Kimi K2.5 on Fireworks AI</p>
+      <div className="shrink-0 border-t border-black/8 dark:border-white/8 px-3 py-3">
+        <p className="text-xs text-gray-400 dark:text-gray-500">Powered by Kimi K2.5 on Fireworks AI</p>
       </div>
     </>
   );
 
   return (
-    <div className="flex flex-col" style={{ backgroundColor: BG, height: '100dvh' }}>
+    <div className="flex flex-col" style={{ backgroundColor: 'var(--bg)', height: '100dvh' }}>
       {/* ── Header ── */}
       <header
-        className="flex h-14 shrink-0 items-center justify-between border-b border-black/8 px-4"
-        style={{ backgroundColor: 'rgba(247,246,242,0.92)', backdropFilter: 'blur(14px)' }}
+        className="flex h-14 shrink-0 items-center justify-between border-b border-black/8 dark:border-white/8 px-4"
+        style={{ backgroundColor: 'var(--bg-header)', backdropFilter: 'blur(14px)' }}
       >
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSidebarOpen(o => !o)}
-            className="flex size-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-black/6 hover:text-gray-900 active:bg-black/10"
+            className="flex size-9 items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 transition-colors hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/10 dark:active:bg-white/10"
             aria-label="Toggle sidebar"
           >
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -856,17 +855,18 @@ export default function AppPage() {
               <rect x="2" y="12.6" width="14" height="1.4" rx="0.7" fill="currentColor" />
             </svg>
           </button>
-          <Link href="/" className="text-base font-bold tracking-tight text-gray-950">
+          <Link href="/" className="text-base font-bold tracking-tight text-gray-950 dark:text-gray-50">
             ONA
           </Link>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           {githubStatus?.connected
             ? (
                 <button
                   onClick={disconnectGitHub}
                   title={`Connected as ${githubStatus.user?.login ?? 'GitHub user'}. Click to disconnect.`}
-                  className="flex items-center gap-2 rounded-lg border border-black/10 bg-white/60 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-black/6 hover:text-gray-950 active:bg-black/10"
+                  className="flex items-center gap-2 rounded-lg border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 transition-colors hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-950 dark:hover:text-gray-50 active:bg-black/10"
                 >
                   {githubStatus.user?.avatar_url
                     ? <img src={githubStatus.user.avatar_url} alt="" className="size-5 rounded-full" />
@@ -883,7 +883,7 @@ export default function AppPage() {
                   onClick={startDeviceAuth}
                   disabled={githubStatus?.configured === false}
                   title={githubStatus?.configured === false ? 'GITHUB_CLIENT_ID is not configured.' : 'Connect GitHub to let Ona inspect repos and open PRs.'}
-                  className="flex items-center gap-2 rounded-lg border border-black/10 px-3 py-2 text-sm transition-colors bg-gray-950 text-white hover:opacity-85 active:opacity-75 disabled:pointer-events-none disabled:bg-gray-100 disabled:text-gray-400"
+                  className="flex items-center gap-2 rounded-lg border border-black/10 dark:border-white/10 px-3 py-2 text-sm transition-colors bg-gray-950 dark:bg-gray-100 dark:text-gray-900 text-white hover:opacity-85 active:opacity-75 disabled:pointer-events-none disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:text-gray-400 dark:disabled:text-gray-600"
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.77.4.08.55-.18.55-.4 0-.2-.01-.86-.01-1.56-2.01.38-2.53-.5-2.69-.95-.09-.23-.48-.95-.82-1.14-.28-.16-.68-.55-.01-.56.63-.01 1.08.59 1.23.83.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.37 7.37 0 018 3.95c.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.25.54.74.54 1.5 0 1.09-.01 1.96-.01 2.23 0 .22.15.48.55.4A8.13 8.13 0 0016 8.2C16 3.67 12.42 0 8 0z" />
@@ -893,7 +893,7 @@ export default function AppPage() {
               )}
           <button
             onClick={createNewChat}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-black/6 hover:text-gray-900 active:bg-black/10"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400 transition-colors hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/10"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -918,12 +918,12 @@ export default function AppPage() {
         {/* Sidebar — drawer on mobile, inline on desktop */}
         {sidebarOpen && (
           <aside
-            className={`flex shrink-0 flex-col overflow-hidden border-r border-black/8 ${
+            className={`flex shrink-0 flex-col overflow-hidden border-r border-black/8 dark:border-white/8 ${
               isMobile
                 ? 'absolute left-0 top-0 z-30 h-full w-72 shadow-xl'
                 : 'relative w-64'
             }`}
-            style={{ backgroundColor: SIDEBAR_BG }}
+            style={{ backgroundColor: 'var(--bg-sidebar)' }}
           >
             {sidebarContent}
           </aside>
@@ -937,16 +937,16 @@ export default function AppPage() {
               ? (
                   <div className="flex h-full flex-col items-center justify-center text-center">
                     <h1
-                      className="mb-3 text-2xl text-gray-900 sm:text-4xl"
+                      className="mb-3 text-2xl text-gray-900 dark:text-gray-100 sm:text-4xl"
                       style={{ fontFamily: SERIF, fontWeight: 400 }}
                     >
                       What should Ona do?
                     </h1>
-                    <p className="mb-7 max-w-xs text-sm text-gray-500 sm:max-w-sm">
+                    <p className="mb-7 max-w-xs text-sm text-gray-500 dark:text-gray-400 sm:max-w-sm">
                       Connect GitHub, describe a task, and a background agent can inspect repos, create a branch, commit changes, and open a pull request.
                     </p>
                     {githubStatus?.configured === false && (
-                      <p className="mb-4 max-w-sm rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                      <p className="mb-4 max-w-sm rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/50 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
                         GitHub Device Auth needs GITHUB_CLIENT_ID before users can connect their repositories.
                       </p>
                     )}
@@ -955,8 +955,8 @@ export default function AppPage() {
                         <button
                           key={s}
                           onClick={() => send(s)}
-                          className="rounded-full border border-gray-300 px-4 py-2.5 text-sm text-gray-700 transition-colors hover:border-gray-500 hover:text-gray-950 active:bg-gray-100"
-                          style={{ backgroundColor: '#f7f6f2' }}
+                          className="rounded-full border border-gray-300 dark:border-gray-700 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 transition-colors hover:border-gray-500 dark:hover:border-gray-500 hover:text-gray-950 dark:hover:text-gray-50 active:bg-gray-100 dark:active:bg-gray-800"
+                          style={{ backgroundColor: 'var(--bg)' }}
                         >
                           {s}
                         </button>
@@ -976,14 +976,14 @@ export default function AppPage() {
           </div>
 
           {/* ── Input bar ── */}
-          <div className="shrink-0 border-t border-gray-200 px-3 py-3 sm:px-6 sm:py-4">
+          <div className="shrink-0 border-t border-gray-200 dark:border-gray-800 px-3 py-3 sm:px-6 sm:py-4">
             <div className="mx-auto max-w-2xl">
               {pendingImage && (
                 <div className="mb-2 flex items-center gap-2">
-                  <img src={pendingImage} alt="Pending" className="h-14 rounded-lg border border-gray-200 object-cover" />
+                  <img src={pendingImage} alt="Pending" className="h-14 rounded-lg border border-gray-200 dark:border-gray-700 object-cover" />
                   <button
                     onClick={() => setPendingImage(null)}
-                    className="flex size-7 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                    className="flex size-7 items-center justify-center rounded-full text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300"
                     aria-label="Remove image"
                   >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -994,14 +994,14 @@ export default function AppPage() {
               )}
 
               <div
-                className="flex items-end gap-2 rounded-2xl border border-gray-300 px-3 py-2.5 transition-shadow focus-within:border-gray-400 focus-within:shadow-sm"
-                style={{ backgroundColor: '#fff' }}
+                className="flex items-end gap-2 rounded-2xl border border-gray-300 dark:border-gray-700 px-3 py-2.5 transition-shadow focus-within:border-gray-400 dark:focus-within:border-gray-500 focus-within:shadow-sm"
+                style={{ backgroundColor: 'var(--bg-input)' }}
               >
                 {/* Image attach */}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex size-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 active:bg-gray-100"
+                  className="flex size-9 shrink-0 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800"
                   aria-label="Attach image"
                 >
                   <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
@@ -1020,7 +1020,7 @@ export default function AppPage() {
                   onKeyDown={handleKey}
                   onPaste={handlePaste}
                   placeholder="Describe a task for your agent…"
-                  className="flex-1 resize-none bg-transparent py-1 text-sm text-gray-900 placeholder-gray-400 outline-none"
+                  className="flex-1 resize-none bg-transparent py-1 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
                   style={{ maxHeight: '160px' }}
                 />
 
@@ -1038,7 +1038,7 @@ export default function AppPage() {
               </div>
 
               {/* Hint — desktop only */}
-              <p className="mt-1.5 hidden text-center text-xs text-gray-400 sm:block">
+              <p className="mt-1.5 hidden text-center text-xs text-gray-400 dark:text-gray-500 sm:block">
                 Enter to send · Shift+Enter for new line · paste images
               </p>
             </div>
@@ -1053,17 +1053,17 @@ export default function AppPage() {
           onClick={e => e.target === e.currentTarget && cancelDeviceAuth()}
         >
           <div
-            className="w-full max-w-sm rounded-2xl border border-gray-200 p-7 shadow-2xl"
-            style={{ backgroundColor: '#f7f6f2' }}
+            className="w-full max-w-sm rounded-2xl border border-gray-200 dark:border-gray-700 p-7 shadow-2xl"
+            style={{ backgroundColor: 'var(--bg)' }}
           >
             <div className="mb-5 flex items-start justify-between">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Connect GitHub</h2>
-                <p className="mt-0.5 text-xs text-gray-500">Device authorization flow</p>
+                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Connect GitHub</h2>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Device authorization flow</p>
               </div>
               <button
                 onClick={cancelDeviceAuth}
-                className="rounded-lg p-1 text-gray-400 hover:bg-black/6 hover:text-gray-700"
+                className="rounded-lg p-1 text-gray-400 dark:text-gray-500 hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-700 dark:hover:text-gray-300"
                 aria-label="Cancel"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -1075,7 +1075,7 @@ export default function AppPage() {
             {deviceAuth.status === 'error'
               ? (
                   <div className="space-y-4">
-                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    <p className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">
                       {deviceAuth.errorMsg ?? 'Something went wrong.'}
                     </p>
                     <button
@@ -1088,14 +1088,14 @@ export default function AppPage() {
                 )
               : (
                   <div className="space-y-5">
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
                       Visit the URL below and enter the code to authorize Ona.
                     </p>
 
                     {/* Code display */}
-                    <div className="rounded-xl border border-gray-300 bg-white px-4 py-4 text-center">
-                      <p className="mb-1 text-xs font-medium uppercase tracking-widest text-gray-400">Your code</p>
-                      <p className="font-mono text-2xl font-bold tracking-widest text-gray-900">
+                    <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-4 text-center">
+                      <p className="mb-1 text-xs font-medium uppercase tracking-widest text-gray-400 dark:text-gray-500">Your code</p>
+                      <p className="font-mono text-2xl font-bold tracking-widest text-gray-900 dark:text-gray-100">
                         {deviceAuth.user_code}
                       </p>
                       <CopyDeviceCode code={deviceAuth.user_code} />
@@ -1115,7 +1115,7 @@ export default function AppPage() {
                     </a>
 
                     {/* Polling indicator */}
-                    <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-400 dark:text-gray-500">
                       <span
                         className="inline-block size-1.5 rounded-full bg-green-400"
                         style={{ animation: 'ona-pulse 1.2s ease-in-out infinite' }}

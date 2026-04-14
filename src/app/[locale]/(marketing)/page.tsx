@@ -14,7 +14,6 @@ export async function generateMetadata(props: IIndexProps) {
   };
 }
 
-const BG = '#f7f6f2';
 const SERIF = 'Georgia, "Times New Roman", serif';
 
 export default async function Index(props: IIndexProps) {
@@ -22,19 +21,19 @@ export default async function Index(props: IIndexProps) {
   setRequestLocale(locale);
 
   return (
-    <div style={{ backgroundColor: BG }}>
+    <div style={{ backgroundColor: 'var(--bg)' }}>
 
       {/* ── HERO ─────────────────────────────────────────── */}
       <section className="flex flex-col items-center px-4 pb-0 pt-14 text-center sm:px-6 sm:pt-20">
         <h1
-          className="max-w-3xl text-4xl leading-tight text-gray-950 sm:text-5xl md:text-6xl lg:text-7xl"
+          className="max-w-3xl text-4xl leading-tight text-gray-950 dark:text-gray-50 sm:text-5xl md:text-6xl lg:text-7xl"
           style={{ fontFamily: SERIF, fontWeight: 400 }}
         >
           The platform for
           <br />
           background agents
         </h1>
-        <p className="mt-5 max-w-md text-base leading-relaxed text-gray-500 sm:mt-6 sm:max-w-lg sm:text-lg">
+        <p className="mt-5 max-w-md text-base leading-relaxed text-gray-500 dark:text-gray-400 sm:mt-6 sm:max-w-lg sm:text-lg">
           Run a team of AI software engineers in the cloud.
           <br className="hidden sm:block" />
           {' '}
@@ -43,13 +42,13 @@ export default async function Index(props: IIndexProps) {
         <div className="mt-6 flex w-full flex-col items-center gap-3 sm:mt-8 sm:w-auto sm:flex-row">
           <Link
             href="/app/"
-            className="w-full rounded-md bg-gray-950 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-80 sm:w-auto sm:px-5 sm:py-2.5"
+            className="w-full rounded-md bg-gray-950 dark:bg-gray-100 dark:text-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-80 sm:w-auto sm:px-5 sm:py-2.5"
           >
             Start for free
           </Link>
           <Link
             href="/about/"
-            className="w-full rounded-md border border-gray-300 px-6 py-3 text-sm font-medium text-gray-900 transition-colors hover:border-gray-500 sm:w-auto sm:px-5 sm:py-2.5"
+            className="w-full rounded-md border border-gray-300 dark:border-gray-700 px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 transition-colors hover:border-gray-500 dark:hover:border-gray-500 sm:w-auto sm:px-5 sm:py-2.5"
           >
             Request a demo
           </Link>
@@ -145,9 +144,9 @@ export default async function Index(props: IIndexProps) {
               <div key={i} className="flex flex-col items-center gap-1">
                 <div
                   className="h-5 w-20 rounded sm:h-6 sm:w-24"
-                  style={{ backgroundColor: '#d1cfc9' }}
+                  style={{ backgroundColor: 'var(--bg-logo)' }}
                 />
-                <span className="text-xs text-gray-400">{label}</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">{label}</span>
               </div>
             ),
           )}
@@ -158,19 +157,19 @@ export default async function Index(props: IIndexProps) {
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <div className="mb-10 max-w-2xl sm:mb-14">
           <h2
-            className="text-3xl leading-tight text-gray-950 sm:text-4xl md:text-5xl"
+            className="text-3xl leading-tight text-gray-950 dark:text-gray-50 sm:text-4xl md:text-5xl"
             style={{ fontFamily: SERIF, fontWeight: 400 }}
           >
             The AI engineering workforce.
           </h2>
-          <p className="mt-3 text-base text-gray-500 sm:mt-4 sm:text-lg">
+          <p className="mt-3 text-base text-gray-500 dark:text-gray-400 sm:mt-4 sm:text-lg">
             Set the direction. Ona runs the execution. Continuously and autonomously.
           </p>
         </div>
 
         <div
-          className="grid gap-px overflow-hidden rounded-xl border border-gray-200 sm:rounded-2xl md:grid-cols-2"
-          style={{ backgroundColor: '#e5e4e0' }}
+          className="grid gap-px overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 sm:rounded-2xl md:grid-cols-2"
+          style={{ backgroundColor: 'var(--bg-3)' }}
         >
           {[
             {
@@ -201,23 +200,23 @@ export default async function Index(props: IIndexProps) {
             <div
               key={item.tag}
               className="flex flex-col justify-between p-6 sm:p-8"
-              style={{ backgroundColor: BG }}
+              style={{ backgroundColor: 'var(--bg)' }}
             >
               <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400 sm:mb-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 sm:mb-3">
                   {item.tag}
                 </p>
                 <h3
-                  className="mb-2 text-xl text-gray-950 sm:mb-3 sm:text-2xl"
+                  className="mb-2 text-xl text-gray-950 dark:text-gray-50 sm:mb-3 sm:text-2xl"
                   style={{ fontFamily: SERIF, fontWeight: 400 }}
                 >
                   {item.title}
                 </h3>
-                <p className="text-sm leading-relaxed text-gray-500">{item.body}</p>
+                <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">{item.body}</p>
               </div>
               <Link
                 href="/about/"
-                className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-gray-900 hover:underline sm:mt-6"
+                className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-gray-900 dark:text-gray-100 hover:underline sm:mt-6"
               >
                 {item.cta}
                 {' '}
@@ -231,8 +230,8 @@ export default async function Index(props: IIndexProps) {
       {/* ── USE CASES ─────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <div
-          className="space-y-px overflow-hidden rounded-xl border border-gray-200 sm:rounded-2xl"
-          style={{ backgroundColor: '#e5e4e0' }}
+          className="space-y-px overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 sm:rounded-2xl"
+          style={{ backgroundColor: 'var(--bg-3)' }}
         >
           {[
             {
@@ -254,20 +253,20 @@ export default async function Index(props: IIndexProps) {
             <div
               key={item.title}
               className="flex flex-col gap-3 p-6 sm:flex-row sm:items-start sm:justify-between sm:p-8"
-              style={{ backgroundColor: BG }}
+              style={{ backgroundColor: 'var(--bg)' }}
             >
               <div className="max-w-xl">
                 <h3
-                  className="mb-2 text-lg text-gray-950 sm:text-xl"
+                  className="mb-2 text-lg text-gray-950 dark:text-gray-50 sm:text-xl"
                   style={{ fontFamily: SERIF, fontWeight: 400 }}
                 >
                   {item.title}
                 </h3>
-                <p className="text-sm leading-relaxed text-gray-500">{item.body}</p>
+                <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">{item.body}</p>
               </div>
               <Link
                 href="/about/"
-                className="flex-shrink-0 text-sm font-medium text-gray-900 hover:underline sm:mt-1"
+                className="flex-shrink-0 text-sm font-medium text-gray-900 dark:text-gray-100 hover:underline sm:mt-1"
               >
                 {item.cta}
                 {' '}
@@ -282,19 +281,19 @@ export default async function Index(props: IIndexProps) {
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <div
           className="overflow-hidden rounded-xl p-6 sm:rounded-2xl sm:p-10"
-          style={{ backgroundColor: '#eceae4' }}
+          style={{ backgroundColor: 'var(--bg-2)' }}
         >
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
             Top 100 global company
           </p>
           <blockquote
-            className="mb-6 text-xl leading-relaxed text-gray-900 sm:mb-8 sm:text-2xl md:text-3xl"
+            className="mb-6 text-xl leading-relaxed text-gray-900 dark:text-gray-100 sm:mb-8 sm:text-2xl md:text-3xl"
             style={{ fontFamily: SERIF, fontWeight: 400 }}
           >
             "90–95% of migration work is done by Ona Automations. We just have to do the final
             push commands."
           </blockquote>
-          <Link href="/about/" className="text-sm font-medium text-gray-700 hover:underline">
+          <Link href="/about/" className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:underline">
             Read more customer stories →
           </Link>
 
@@ -304,14 +303,14 @@ export default async function Index(props: IIndexProps) {
               { stat: '83%', label: 'of PRs co-authored by Ona' },
               { stat: '400+', label: 'Python repos modernized in 6 months' },
             ].map(item => (
-              <div key={item.stat} className="border-t border-gray-300 pt-5 sm:border-t-0 sm:pt-0 first:border-t-0 first:pt-0">
+              <div key={item.stat} className="border-t border-gray-300 dark:border-gray-700 pt-5 sm:border-t-0 sm:pt-0 first:border-t-0 first:pt-0">
                 <p
-                  className="text-4xl text-gray-950 sm:text-5xl"
+                  className="text-4xl text-gray-950 dark:text-gray-50 sm:text-5xl"
                   style={{ fontFamily: SERIF, fontWeight: 400 }}
                 >
                   {item.stat}
                 </p>
-                <p className="mt-1 text-sm text-gray-500">{item.label}</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{item.label}</p>
               </div>
             ))}
           </div>
@@ -322,16 +321,16 @@ export default async function Index(props: IIndexProps) {
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <div
           className="flex flex-col gap-5 rounded-xl p-6 sm:flex-row sm:items-center sm:justify-between sm:rounded-2xl sm:p-10"
-          style={{ backgroundColor: '#eceae4' }}
+          style={{ backgroundColor: 'var(--bg-2)' }}
         >
           <div>
             <h2
-              className="text-2xl text-gray-950 md:text-3xl"
+              className="text-2xl text-gray-950 dark:text-gray-50 md:text-3xl"
               style={{ fontFamily: SERIF, fontWeight: 400 }}
             >
               Enterprise-ready.
             </h2>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
               Compliant, certified, and trusted by Fortune 500 companies.
             </p>
           </div>
@@ -339,8 +338,8 @@ export default async function Index(props: IIndexProps) {
             {['SOC 2', 'Fortune 500'].map(badge => (
               <div
                 key={badge}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700"
-                style={{ backgroundColor: BG }}
+                className="rounded-lg border border-gray-300 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300"
+                style={{ backgroundColor: 'var(--bg)' }}
               >
                 {badge}
               </div>
@@ -352,14 +351,14 @@ export default async function Index(props: IIndexProps) {
       {/* ── BLOG ──────────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
         <h2
-          className="mb-6 text-2xl text-gray-950 sm:mb-8"
+          className="mb-6 text-2xl text-gray-950 dark:text-gray-50 sm:mb-8"
           style={{ fontFamily: SERIF, fontWeight: 400 }}
         >
           Recent highlights from our blog
         </h2>
         <div
-          className="grid gap-px overflow-hidden rounded-xl border border-gray-200 sm:rounded-2xl md:grid-cols-3"
-          style={{ backgroundColor: '#e5e4e0' }}
+          className="grid gap-px overflow-hidden rounded-xl border border-gray-200 dark:border-gray-800 sm:rounded-2xl md:grid-cols-3"
+          style={{ backgroundColor: 'var(--bg-3)' }}
         >
           {[
             {
@@ -388,24 +387,24 @@ export default async function Index(props: IIndexProps) {
               key={post.title}
               href="/about/"
               className="flex flex-col justify-between p-6 transition-opacity hover:opacity-75 sm:p-8"
-              style={{ backgroundColor: BG }}
+              style={{ backgroundColor: 'var(--bg)' }}
             >
               <div>
-                <div className="mb-3 flex items-center gap-2 text-xs text-gray-400 sm:mb-4">
-                  <span className="rounded-full border border-gray-200 px-2.5 py-0.5 font-medium">
+                <div className="mb-3 flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 sm:mb-4">
+                  <span className="rounded-full border border-gray-200 dark:border-gray-700 px-2.5 py-0.5 font-medium">
                     {post.tag}
                   </span>
                   <span>{post.date}</span>
                 </div>
                 <h3
-                  className="mb-2 text-base leading-snug text-gray-950 sm:text-lg"
+                  className="mb-2 text-base leading-snug text-gray-950 dark:text-gray-50 sm:text-lg"
                   style={{ fontFamily: SERIF, fontWeight: 400 }}
                 >
                   {post.title}
                 </h3>
-                <p className="text-sm leading-relaxed text-gray-500">{post.body}</p>
+                <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">{post.body}</p>
               </div>
-              <p className="mt-5 text-xs text-gray-400 sm:mt-6">{post.author}</p>
+              <p className="mt-5 text-xs text-gray-400 dark:text-gray-500 sm:mt-6">{post.author}</p>
             </Link>
           ))}
         </div>
@@ -414,22 +413,22 @@ export default async function Index(props: IIndexProps) {
       {/* ── FINAL CTA ─────────────────────────────────────── */}
       <section className="mx-auto max-w-6xl px-4 py-12 text-center sm:px-6 sm:py-16">
         <h2
-          className="mb-2 text-3xl text-gray-950 sm:text-4xl md:text-5xl"
+          className="mb-2 text-3xl text-gray-950 dark:text-gray-50 sm:text-4xl md:text-5xl"
           style={{ fontFamily: SERIF, fontWeight: 400 }}
         >
           Start shipping with Ona
         </h2>
-        <p className="mb-6 text-gray-500 sm:mb-8">No commitment. No setup. Just start.</p>
+        <p className="mb-6 text-gray-500 dark:text-gray-400 sm:mb-8">No commitment. No setup. Just start.</p>
         <div className="flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row sm:justify-center">
           <Link
             href="/app/"
-            className="w-full rounded-md bg-gray-950 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-80 sm:w-auto sm:px-5 sm:py-2.5"
+            className="w-full rounded-md bg-gray-950 dark:bg-gray-100 dark:text-gray-900 px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-80 sm:w-auto sm:px-5 sm:py-2.5"
           >
             Start for free
           </Link>
           <Link
             href="/about/"
-            className="w-full rounded-md border border-gray-300 px-6 py-3 text-sm font-medium text-gray-900 transition-colors hover:border-gray-500 sm:w-auto sm:px-5 sm:py-2.5"
+            className="w-full rounded-md border border-gray-300 dark:border-gray-700 px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100 transition-colors hover:border-gray-500 dark:hover:border-gray-500 sm:w-auto sm:px-5 sm:py-2.5"
           >
             Request a demo
           </Link>

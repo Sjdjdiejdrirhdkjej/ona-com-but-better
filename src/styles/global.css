@@ -1,7 +1,37 @@
-@layer theme, base, clerk, components, utilities; /* Ensure Clerk is compatible with Tailwind CSS v4 */
+@layer theme, base, clerk, components, utilities;
 
 @import 'tailwindcss';
 @import 'highlight.js/styles/github.css';
+
+@variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f7f6f2;
+  --bg-2: #eceae4;
+  --bg-3: #e5e4e0;
+  --bg-sidebar: #edecea;
+  --bg-header: rgba(247,246,242,0.88);
+  --bg-card: rgba(255,255,255,0.92);
+  --bg-input: #fff;
+  --bg-logo: #d1cfc9;
+}
+
+.dark {
+  --bg: #0f0f0e;
+  --bg-2: #1c1b19;
+  --bg-3: #252422;
+  --bg-sidebar: #181715;
+  --bg-header: rgba(15,15,14,0.88);
+  --bg-card: rgba(32,31,29,0.92);
+  --bg-input: #1e1d1b;
+  --bg-logo: #3a3936;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: var(--bg);
+}
 
 .hljs {
   background: rgba(0, 0, 0, 0.06) !important;
@@ -11,11 +41,20 @@
   line-height: 1.6;
 }
 
-:root {
-  --background: #f7f6f2;
+.dark .hljs {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #e6edf3 !important;
 }
-
-html,
-body {
-  background-color: var(--background);
-}
+.dark .hljs-keyword,
+.dark .hljs-selector-tag { color: #ff7b72 !important; }
+.dark .hljs-string,
+.dark .hljs-attr { color: #a5d6ff !important; }
+.dark .hljs-comment,
+.dark .hljs-doctag { color: #8b949e !important; }
+.dark .hljs-number,
+.dark .hljs-literal { color: #79c0ff !important; }
+.dark .hljs-title,
+.dark .hljs-function,
+.dark .hljs-name { color: #d2a8ff !important; }
+.dark .hljs-built_in,
+.dark .hljs-type { color: #ffa657 !important; }

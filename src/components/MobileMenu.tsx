@@ -12,8 +12,6 @@ const navLinks = [
   { label: 'Pricing', href: '/about/' },
 ];
 
-const BG = '#f7f6f2';
-
 export function MobileMenu() {
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -32,7 +30,7 @@ export function MobileMenu() {
       <button
         onClick={() => setOpen(prev => !prev)}
         aria-label="Toggle menu"
-        className="flex size-9 items-center justify-center rounded-md text-gray-700 transition-colors hover:bg-black/5"
+        className="flex size-9 items-center justify-center rounded-md text-gray-700 dark:text-gray-300 transition-colors hover:bg-black/5 dark:hover:bg-white/8"
       >
         {open
           ? (
@@ -49,8 +47,8 @@ export function MobileMenu() {
 
       {open && (
         <div
-          className="absolute left-0 right-0 top-14 z-40 border-b border-gray-200 px-5 pb-5 pt-4 shadow-sm"
-          style={{ backgroundColor: BG }}
+          className="absolute left-0 right-0 top-14 z-40 border-b border-gray-200 dark:border-gray-800 px-5 pb-5 pt-4 shadow-sm"
+          style={{ backgroundColor: 'var(--bg-header)' }}
         >
           <nav>
             <ul className="space-y-1">
@@ -59,7 +57,7 @@ export function MobileMenu() {
                   <Link
                     href={link.href}
                     onClick={() => setOpen(false)}
-                    className="block rounded-md px-3 py-2.5 text-base font-medium text-gray-700 transition-colors hover:bg-black/5"
+                    className="block rounded-md px-3 py-2.5 text-base font-medium text-gray-700 dark:text-gray-300 transition-colors hover:bg-black/5 dark:hover:bg-white/8"
                   >
                     {link.label}
                   </Link>
@@ -67,8 +65,7 @@ export function MobileMenu() {
               ))}
             </ul>
 
-            <div className="mt-4 flex flex-col gap-2 border-t border-gray-200 pt-4">
-              {/* Prompt box */}
+            <div className="mt-4 flex flex-col gap-2 border-t border-gray-200 dark:border-gray-800 pt-4">
               <form onSubmit={handleSubmit} className="relative flex items-center">
                 <input
                   ref={inputRef}
@@ -76,13 +73,13 @@ export function MobileMenu() {
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
                   placeholder="Ask anything…"
-                  className="h-10 w-full rounded-full border border-gray-300 bg-white/80 pl-4 pr-11 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-gray-400 focus:bg-white focus:shadow-sm"
+                  className="h-10 w-full rounded-full border border-gray-300 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 pl-4 pr-11 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-gray-400 focus:bg-white dark:focus:bg-gray-700 focus:shadow-sm"
                 />
                 <button
                   type="submit"
                   aria-label="Send"
                   disabled={!prompt.trim()}
-                  className="absolute right-2 flex size-6 items-center justify-center rounded-full bg-gray-900 text-white transition-opacity hover:opacity-80 disabled:opacity-30"
+                  className="absolute right-2 flex size-6 items-center justify-center rounded-full bg-gray-900 dark:bg-gray-100 dark:text-gray-900 text-white transition-opacity hover:opacity-80 disabled:opacity-30"
                 >
                   <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
                     <path d="M5 8.5V1.5M5 1.5L2 4.5M5 1.5L8 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -93,7 +90,7 @@ export function MobileMenu() {
               <Link
                 href="/app/"
                 onClick={() => setOpen(false)}
-                className="rounded-md bg-gray-950 px-3 py-2.5 text-center text-base font-medium text-white transition-opacity hover:opacity-80"
+                className="rounded-md bg-gray-950 dark:bg-gray-100 dark:text-gray-900 px-3 py-2.5 text-center text-base font-medium text-white transition-opacity hover:opacity-80"
               >
                 Get Started
               </Link>
