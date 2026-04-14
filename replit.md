@@ -9,7 +9,7 @@ An Ona.com clone — a platform for AI background software engineering agents. T
 - **ORM**: Drizzle ORM
 - **Styling**: Tailwind CSS v4
 - **i18n**: next-intl with `[locale]` routing, locales en/fr, `as-needed` prefix (so `/app` works without prefix)
-- **AI**: Fireworks AI — Llama 4 Maverick (`accounts/fireworks/models/llama4-maverick-instruct-basic`), streaming, vision/image support
+- **AI**: Fireworks AI — Kimi K2.5 (`accounts/fireworks/models/kimi-k2p5`), streaming, vision/image support, 262k context, tool-use
 - **Package manager**: npm (with `legacy-peer-deps=true` in `.npmrc`)
 
 ## Replit Configuration

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
-const MODEL = 'accounts/fireworks/models/llama4-maverick-instruct-basic';
+const MODEL = 'accounts/fireworks/models/kimi-k2p5';
 
 const SYSTEM_PROMPT = `You are Ona, an intelligent AI platform for orchestrating background software engineering agents. You help engineering teams ship faster by running autonomous agents that execute complex tasks end-to-end and deliver pull requests.
 
