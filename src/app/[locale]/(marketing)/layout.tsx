@@ -50,10 +50,10 @@ export default async function Layout(props: {
         <>
           <NavPromptBox />
           <Link
-            href="/sign-up/"
+            href="/app/"
             className="rounded-md border border-gray-900 px-3 py-1.5 text-gray-900 transition-colors hover:bg-gray-900 hover:text-white"
           >
-            Request a demo
+            Get Started
           </Link>
         </>
       )}

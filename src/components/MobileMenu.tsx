@@ -91,11 +91,11 @@ export function MobileMenu() {
               </form>
 
               <Link
-                href="/sign-up/"
+                href="/app/"
                 onClick={() => setOpen(false)}
                 className="rounded-md bg-gray-950 px-3 py-2.5 text-center text-base font-medium text-white transition-opacity hover:opacity-80"
               >
-                Request a demo
+                Get Started
               </Link>
             </div>
           </nav>
