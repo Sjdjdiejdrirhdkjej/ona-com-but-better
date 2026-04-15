@@ -4,7 +4,7 @@ import { db } from '@/libs/DB';
 import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/GitHub';
 import { daytonaToolDefinitions, isDaytonaTool, runDaytonaTool } from '@/libs/Daytona';
-import { isLibrarianTool, librarianToolDefinitions, runLibrarianTool } from '@/libs/Librarian';
+import { callLibrarianToolDefinition, isCallLibrarianTool, runLibrarianSubagent } from '@/libs/Librarian';
 
 export const runtime = 'nodejs';
 
@@ -56,14 +56,18 @@ You are built to handle these types of tasks autonomously:
 **Issue → PR workflow**
 - Read an issue with github_get_issue, understand the request, implement the fix, open a PR that references the issue.
 
-## Librarian — documentation & research
-Before writing code that depends on an unfamiliar library, API, or pattern, use the librarian tools to scout authoritative sources first:
-1. **librarian_search_web** — Search for documentation, tutorials, changelogs, or reference implementations. Returns ranked URLs.
-2. **librarian_fetch_url** — Fetch and read any public URL in full (docs pages, MDN, RFCs, blog posts, changelogs).
-3. **librarian_npm_package** — Look up an npm package: latest version, README, homepage, peer deps. Use before adding a dependency.
-4. **librarian_github_readme** — Read the README of any public GitHub repo. Great for finding usage examples and getting oriented in a new library.
+## Librarian subagent — documentation & research
+You have access to a specialist Librarian subagent via the \`call_librarian\` tool. The librarian is a fully autonomous research agent: it independently searches the web, fetches documentation pages, reads npm package registries, and reads public GitHub READMEs — then returns a synthesised report to you.
 
-Use the librarian proactively: if a task involves a library you haven't seen in the conversation yet, fetch its docs before writing code.
+You do NOT need to browse or fetch URLs yourself. Delegate all research to the librarian by calling \`call_librarian\` with a clear research question.
+
+Use the librarian proactively:
+- Before implementing anything that uses a library or API you haven't seen in the conversation, ask the librarian first.
+- When troubleshooting an unfamiliar error, ask the librarian to search for it.
+- When you need to check a package version, migration guide, or changelog, ask the librarian.
+- When you want a reference implementation from a popular open-source repo, ask the librarian.
+
+Example call: \`call_librarian({ request: "Find the drizzle-orm docs for running migrations programmatically in a Next.js API route" })\`
 
 ## Daytona sandbox execution
 When you need to actually *run* code — tests, builds, linters, scripts — use the Daytona sandbox tools:
@@ -115,11 +119,16 @@ const TOOL_LABELS: Record<string, string> = {
   sandbox_list_files: 'Listing sandbox files',
   sandbox_delete: 'Deleting sandbox',
   sandbox_git_clone: 'Cloning repo into sandbox',
+  call_librarian: 'Consulting librarian',
 };
 
 function toolLabel(name: string, args?: Record<string, unknown>): string {
   if (name === 'sandbox_read_file' && args?.path) {
     return `Read ${args.path}`;
+  }
+  if (name === 'call_librarian' && typeof args?.request === 'string') {
+    const snippet = args.request.slice(0, 60);
+    return `Librarian: ${snippet}${args.request.length > 60 ? '…' : ''}`;
   }
   return TOOL_LABELS[name] ?? name.replace('github_', '').replace(/_/g, ' ');
 }
@@ -382,7 +391,7 @@ export async function POST(req: NextRequest) {
         const { content, toolCalls } = await streamFireworksCall(
           {
             messages: conversation,
-            tools: [...githubToolDefinitions, ...daytonaToolDefinitions],
+            tools: [...githubToolDefinitions, ...daytonaToolDefinitions, callLibrarianToolDefinition],
             tool_choice: 'auto',
             max_tokens: 1400,
             temperature: 0.3,
@@ -435,9 +444,15 @@ export async function POST(req: NextRequest) {
             emit({ type: 'tool_start', tool: label });
             if (jobId) await persistJobEvent(jobId, 'tool_start', { tool: label });
             try {
-              const result = isDaytonaTool(toolName)
-                ? await runDaytonaTool(toolName, toolArgs)
-                : await runGitHubTool(githubToken, toolName, toolArgs);
+              let result: unknown;
+              if (isCallLibrarianTool(toolName)) {
+                const request = typeof toolArgs.request === 'string' ? toolArgs.request : JSON.stringify(toolArgs);
+                result = await runLibrarianSubagent(request);
+              } else if (isDaytonaTool(toolName)) {
+                result = await runDaytonaTool(toolName, toolArgs);
+              } else {
+                result = await runGitHubTool(githubToken, toolName, toolArgs);
+              }
               conversation.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result).slice(0, 24000) });
               const idx = toolSteps.findIndex(s => s.label === label);
               if (idx !== -1) toolSteps[idx]!.status = 'done';
