@@ -27,16 +27,25 @@ You are optimized for open-ended software research:
 - Tasks where the main agent needs exact names, endpoints, options, limitations, examples, and tradeoffs before writing code.
 
 ## Tools available to you
-- **fetch_url** — Fetch and read any public URL (docs, MDN, blog posts, RFCs, changelogs). Use this to read full documentation pages after searching for them.
-- **search_web** — Search the web for documentation, tutorials, changelogs, issues, or reference implementations. Returns a ranked list of URLs — follow up with fetch_url on the best results.
+- **scrape_page** — Scrape any public URL using Firecrawl and return clean, well-structured Markdown. This is your primary tool for reading web pages — it handles JavaScript-rendered SPAs, docs sites, and complex layouts far better than a raw fetch. Use this whenever you need the full readable content of a page. Prefer this over fetch_url for any modern docs site (e.g. Vercel, React, Tailwind, Radix, Drizzle, Clerk, Supabase, etc.).
+- **fetch_url** — Fetch any public URL as raw text (HTML stripped). Use this as a fallback when scrape_page is unavailable or for plain-text resources like raw JSON, plain API endpoints, or RFC documents that don't need JavaScript rendering.
+- **search_web** — Search the web for documentation, tutorials, changelogs, issues, or reference implementations. Returns a ranked list of URLs — follow up with scrape_page on the best results.
 - **npm_package** — Look up an npm package: latest version, README, homepage, peer deps, license.
 - **github_readme** — Fetch the README of any public GitHub repository.
+
+## Surfing the web with Firecrawl
+You have full web-surfing capability via scrape_page (powered by Firecrawl). Use it freely and aggressively:
+- After search_web returns candidate URLs, scrape the most promising ones immediately.
+- For multi-page documentation, scrape the index or overview page first, identify sub-pages from the links, then scrape those.
+- If a page's content is thin or unhelpful, pivot to an alternative URL right away.
+- Firecrawl returns clean Markdown — you can read it directly without any post-processing.
+- Do not shy away from scraping several pages per research task; thorough coverage is the goal.
 
 ## How to work
 1. Restate the research objective internally, identify the likely source types needed, and choose a plan before using tools.
 2. Prefer primary and authoritative sources: official docs, API references, model pages, release notes, package registries, standards, and first-party GitHub repos.
 3. Use search_web to discover sources when you do not already know the exact authoritative URL. Use npm_package or github_readme directly when the package/repo is known.
-4. Always fetch and read the actual source pages you rely on. Do not cite search result snippets as evidence.
+4. Always scrape and read the actual source pages you rely on via scrape_page. Do not cite search result snippets as evidence.
 5. Explore enough sources for confidence. For simple lookups, one or two primary sources can be enough. For nuanced or architectural questions, read multiple independent sources and compare them.
 6. Pivot when sources conflict, are outdated, are thin, or reveal a better lead. Call out contradictions and prefer the newest official source when appropriate.
 7. Extract details that matter for builders: exact identifiers, endpoints, request shapes, version constraints, environment variables, limits, caveats, pricing/latency implications when relevant, and copy-pastable examples.
@@ -50,7 +59,7 @@ Return a Markdown report with the sections that fit the task:
 - **Key findings**: Detailed bullets with exact technical facts.
 - **Implementation notes**: Concrete steps, request shapes, env vars, package names, model IDs, code/config examples, or migration guidance when relevant.
 - **Risks and unknowns**: Staleness, inaccessible docs, conflicting sources, rate limits, compatibility concerns, or assumptions.
-- **Sources read**: URLs you fetched/read, with one short note about what each source contributed.
+- **Sources read**: URLs you scraped/fetched/read, with one short note about what each source contributed.
 
 Default to being thorough and implementation-ready rather than brief. Be concise only when the request is clearly simple. The main agent will use your report to write code, so make it accurate, detailed, and actionable.`;
 
@@ -66,6 +75,23 @@ type ToolDefinition = {
 };
 
 const INTERNAL_TOOLS: ToolDefinition[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'scrape_page',
+      description:
+        'Scrape any public URL using Firecrawl and return the page content as clean, well-structured Markdown. This is your primary web-reading tool — use it in preference to fetch_url for all modern documentation sites, SPAs, and any page that requires JavaScript rendering. Returns clean Markdown ready to read directly.',
+      parameters: {
+        type: 'object',
+        required: ['url'],
+        properties: {
+          url: { type: 'string', description: 'Fully-qualified URL (https://...) to scrape.' },
+          max_chars: { type: 'number', description: 'Max characters of Markdown to return (default 40000, max 100000).' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
   {
     type: 'function',
     function: {
@@ -162,7 +188,38 @@ async function httpFetch(url: string, opts?: RequestInit): Promise<Response> {
 
 // ── Internal tool executor ───────────────────────────────────────────────────
 
+const FIRECRAWL_API_URL = 'https://api.firecrawl.dev/v1/scrape';
+
 async function runInternalTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+  if (name === 'scrape_page') {
+    const url = String(args.url ?? '');
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      throw new Error('url must start with http:// or https://');
+    }
+    const maxChars = Math.min(Number(args.max_chars ?? 40000), 100000);
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    if (!apiKey) {
+      throw new Error('FIRECRAWL_API_KEY is not configured — falling back is not possible. Tell the main agent this tool is unavailable.');
+    }
+    const res = await httpFetch(FIRECRAWL_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ url, formats: ['markdown'] }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => res.statusText);
+      throw new Error(`Firecrawl error (${res.status}) scraping ${url}: ${errText}`);
+    }
+    type FirecrawlResponse = { success: boolean; data?: { markdown?: string; metadata?: Record<string, unknown> } };
+    const data = await res.json() as FirecrawlResponse;
+    if (!data.success) throw new Error(`Firecrawl returned success=false for ${url}`);
+    const markdown = (data.data?.markdown ?? '').slice(0, maxChars);
+    return { url, char_count: markdown.length, markdown };
+  }
+
   if (name === 'fetch_url') {
     const url = String(args.url ?? '');
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -349,6 +406,10 @@ function internalStepLabel(name: string, args: Record<string, unknown>): string 
   const trim = (v: string, max = 50) => (v.length > max ? `${v.slice(0, max)}…` : v);
 
   switch (name) {
+    case 'scrape_page': {
+      const url = s('url').replace(/^https?:\/\//, '');
+      return `Scraping ${trim(url, 52)}`;
+    }
     case 'fetch_url': {
       const url = s('url').replace(/^https?:\/\//, '');
       return `Fetching ${trim(url, 52)}`;
