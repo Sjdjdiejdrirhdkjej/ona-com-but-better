@@ -12,6 +12,17 @@ import { routing } from './I18nRouting';
 // 2. Run manually the workflow on GitHub Actions
 // 3. Every 24 hours at 5am, the workflow will run automatically
 
+async function loadMessages(locale: string) {
+  try {
+    return (await import(`../locales/${locale}.json`)).default;
+  } catch {
+    if (locale !== routing.defaultLocale) {
+      return (await import(`../locales/${routing.defaultLocale}.json`)).default;
+    }
+    return {};
+  }
+}
+
 export default getRequestConfig(async ({ requestLocale }) => {
   // Typically corresponds to the `[locale]` segment
   const requested = await requestLocale;
@@ -21,6 +32,6 @@ export default getRequestConfig(async ({ requestLocale }) => {
 
   return {
     locale,
-    messages: (await import(`../locales/${locale}.json`)).default,
+    messages: await loadMessages(locale),
   };
 });
