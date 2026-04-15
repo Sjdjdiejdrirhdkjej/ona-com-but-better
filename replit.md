@@ -46,3 +46,57 @@ npm run build        # Build for production
 npm run db:generate  # Generate Drizzle migrations
 npm run db:studio    # Open Drizzle Studio
 ```
+
+## Replit Installation (for new sessions)
+
+**Do not use `npm install` directly** — it consistently fails in Replit with `ENOTEMPTY` rename errors or silent timeouts because the environment cannot cleanly reorganize a pre-existing `node_modules` tree.
+
+### Correct setup steps for a fresh session
+
+1. **Provision the database** via the Replit code execution sandbox:
+   ```javascript
+   const status = await checkDatabase();
+   if (!status.provisioned) {
+     await createDatabase();
+   }
+   ```
+   This sets `DATABASE_URL` and related env vars automatically.
+
+2. **If `node_modules` is corrupted or missing binaries**, remove it first:
+   ```bash
+   rm -rf /home/runner/workspace/node_modules
+   ```
+
+3. **Install packages using the Replit package installer** (not `npm install`), split into batches:
+
+   **Core / runtime:**
+   ```javascript
+   await installLanguagePackages({ language: "nodejs", packages: [
+     "next", "react", "react-dom"
+   ]});
+   ```
+
+   **App dependencies:**
+   ```javascript
+   await installLanguagePackages({ language: "nodejs", packages: [
+     "next-intl", "@t3-oss/env-nextjs", "zod", "drizzle-orm",
+     "pg", "pino", "pino-pretty", "react-markdown", "rehype-highlight",
+     "remark-gfm", "highlight.js", "react-hook-form",
+     "@hookform/resolvers", "@electric-sql/pglite", "@daytonaio/sdk"
+   ]});
+   ```
+
+   **Dev tools:**
+   ```javascript
+   await installLanguagePackages({ language: "nodejs", packages: [
+     "tailwindcss", "@tailwindcss/postcss", "postcss", "typescript",
+     "@types/node", "@types/react", "@types/react-dom", "@types/pg",
+     "drizzle-kit", "npm-run-all2", "cross-env",
+     "@electric-sql/pglite-socket", "dotenv-cli"
+   ]});
+   ```
+
+4. **Restart the "Start application" workflow** — the app should compile and be ready.
+
+### Why this works
+Replit's native package installer handles dependency resolution and binary linking correctly in the NixOS container, whereas `npm install` races against the existing `node_modules` tree and hits filesystem rename conflicts (`ENOTEMPTY`).
