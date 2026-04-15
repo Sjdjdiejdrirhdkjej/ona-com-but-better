@@ -1146,7 +1146,7 @@ export default function AppPage() {
                   </button>
                   <button
                     onClick={e => deleteConversation(c.id, e)}
-                    className="delete-btn absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 dark:text-gray-600 opacity-0 transition-opacity hover:text-gray-600 dark:hover:text-gray-400 group-hover:opacity-100"
+                    className="delete-btn absolute right-2 top-3 shrink-0 rounded p-1 text-gray-400 dark:text-gray-500 transition-colors hover:text-gray-700 dark:hover:text-gray-300"
                     aria-label="Delete task"
                   >
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
