@@ -1149,7 +1149,7 @@ export default function AppPage() {
       </div>
 
       <div className="shrink-0 border-t border-black/8 dark:border-white/8 px-3 py-3">
-        <p className="text-xs text-gray-400 dark:text-gray-500">Powered by Kimi K2.5 on Fireworks AI</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">Powered by Claude Opus 4.6</p>
       </div>
     </>
   );
