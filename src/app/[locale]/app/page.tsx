@@ -499,6 +499,7 @@ export default function AppPage() {
   const [atMentionFetching, setAtMentionFetching] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bgPollTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -996,6 +997,9 @@ export default function AppPage() {
     // Tracks which assistant message is being filled with deltas
     let currentAssistantId = assistantId;
 
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -1005,6 +1009,7 @@ export default function AppPage() {
           conversationId: convId,
           assistantMessageId: assistantId,
         }),
+        signal: abortController.signal,
       });
 
       if (!res.ok) {
@@ -1216,29 +1221,40 @@ export default function AppPage() {
         }
       }
     } catch (err) {
-      const errText = `Something went wrong: ${(err as Error).message}`;
-      const targetId = currentAssistantId;
-      setConversations(prev =>
-        prev.map(c =>
-          c.id === convId
-            ? {
-                ...c,
-                messages: c.messages.map(m =>
-                  m.id === targetId
-                    ? { ...m, content: errText }
-                    : m,
-                ),
-              }
-            : c,
-        ),
-      );
+      if ((err as Error).name === 'AbortError') {
+        // User stopped generation — clean up silently
+      } else {
+        const errText = `Something went wrong: ${(err as Error).message}`;
+        const targetId = currentAssistantId;
+        setConversations(prev =>
+          prev.map(c =>
+            c.id === convId
+              ? {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.id === targetId
+                      ? { ...m, content: errText }
+                      : m,
+                  ),
+                }
+              : c,
+          ),
+        );
+      }
     } finally {
+      abortControllerRef.current = null;
       setLoading(false);
       setConversations(prev => prev.map(c =>
         c.id === convId ? { ...c, activeJobId: null } : c,
       ));
     }
   }, [activeId, conversations, loading]);
+
+  function stopGeneration() {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setLoading(false);
+  }
 
   function detectAtMention(value: string, selectionStart: number) {
     const textBefore = value.slice(0, selectionStart);
@@ -1739,17 +1755,29 @@ export default function AppPage() {
                   style={{ maxHeight: '160px' }}
                 />
 
-                {/* Send */}
-                <button
-                  onClick={() => send(input, pendingImage ?? undefined)}
-                  disabled={!canSend}
-                  aria-label="Send"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 disabled:opacity-25 active:opacity-70"
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M7 12V2M7 2L3 6M7 2L11 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
+                {/* Send / Stop */}
+                {loading ? (
+                  <button
+                    onClick={stopGeneration}
+                    aria-label="Stop"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 active:opacity-70"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => send(input, pendingImage ?? undefined)}
+                    disabled={!canSend}
+                    aria-label="Send"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 disabled:opacity-25 active:opacity-70"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M7 12V2M7 2L3 6M7 2L11 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
               </div>
 
               {/* Hint — desktop only */}
