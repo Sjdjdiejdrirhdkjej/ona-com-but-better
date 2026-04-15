@@ -464,6 +464,10 @@ export default function AppPage() {
   const [search, setSearch] = useState('');
   const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null);
   const [deviceAuth, setDeviceAuth] = useState<DeviceAuthState | null>(null);
+  const [atMention, setAtMention] = useState<{ query: string; caretPos: number } | null>(null);
+  const [sandboxFiles, setSandboxFiles] = useState<string[]>([]);
+  const [atMentionIndex, setAtMentionIndex] = useState(0);
+  const [atMentionFetching, setAtMentionFetching] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bgPollTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -471,6 +475,7 @@ export default function AppPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const syncedIds = useRef<Set<string>>(new Set());
+  const sandboxFilesCacheRef = useRef<Map<string, string[]>>(new Map());
 
   // Load conversation history from DB on mount
   useEffect(() => {
@@ -517,6 +522,11 @@ export default function AppPage() {
     }
     loadHistory();
   }, []);
+
+  useEffect(() => {
+    setAtMention(null);
+    setSandboxFiles([]);
+  }, [activeId]);
 
   function scheduleBackgroundPoll(convId: string, jobId: string, cursor: number) {
     const existing = bgPollTimersRef.current.get(convId);
@@ -1166,7 +1176,98 @@ export default function AppPage() {
     }
   }, [activeId, conversations, loading]);
 
+  function detectAtMention(value: string, selectionStart: number) {
+    const textBefore = value.slice(0, selectionStart);
+    const match = textBefore.match(/@(\S*)$/);
+    if (match) {
+      return { query: match[1] ?? '', caretPos: selectionStart - (match[0]?.length ?? 0) };
+    }
+    return null;
+  }
+
+  function fuzzyMatch(query: string, target: string): boolean {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    const t = target.toLowerCase();
+    let qi = 0;
+    for (let i = 0; i < t.length && qi < q.length; i++) {
+      if (t[i] === q[qi]) qi++;
+    }
+    return qi === q.length;
+  }
+
+  async function fetchSandboxFiles() {
+    if (!activeId) return;
+    const cached = sandboxFilesCacheRef.current.get(activeId);
+    if (cached) {
+      setSandboxFiles(cached);
+      return;
+    }
+    setAtMentionFetching(true);
+    try {
+      const res = await fetch(`/api/sandbox/files?conversationId=${activeId}`);
+      if (res.ok) {
+        const data = await res.json() as { files: string[] };
+        const files = data.files ?? [];
+        sandboxFilesCacheRef.current.set(activeId, files);
+        setSandboxFiles(files);
+      }
+    } catch {}
+    finally {
+      setAtMentionFetching(false);
+    }
+  }
+
+  function selectAtFile(file: string) {
+    if (!atMention || !textareaRef.current) return;
+    const fileName = file.split('/').pop() ?? file;
+    const atStart = atMention.caretPos;
+    const cursorPos = textareaRef.current.selectionStart ?? input.length;
+    const before = input.slice(0, atStart);
+    const after = input.slice(cursorPos);
+    const newInput = `${before}@${fileName} ${after}`;
+    setInput(newInput);
+    setAtMention(null);
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const pos = atStart + fileName.length + 2;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(pos, pos);
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+      }
+    }, 0);
+  }
+
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (atMention) {
+      const filteredCount = sandboxFiles.filter(f => fuzzyMatch(atMention.query, f)).length;
+      if (filteredCount > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setAtMentionIndex(i => Math.min(i + 1, filteredCount - 1));
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setAtMentionIndex(i => Math.max(i - 1, 0));
+          return;
+        }
+        if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+          const filtered = sandboxFiles.filter(f => fuzzyMatch(atMention.query, f));
+          const chosen = filtered[atMentionIndex];
+          if (chosen) {
+            e.preventDefault();
+            selectAtFile(chosen);
+            return;
+          }
+        }
+      }
+      if (e.key === 'Escape') {
+        setAtMention(null);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       send(input, pendingImage ?? undefined);
@@ -1174,10 +1275,20 @@ export default function AppPage() {
   }
 
   function autoResize(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    setInput(e.target.value);
+    const value = e.target.value;
+    const selectionStart = e.target.selectionStart ?? value.length;
+    setInput(value);
     const el = e.target;
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    const mention = detectAtMention(value, selectionStart);
+    if (mention) {
+      setAtMention(mention);
+      setAtMentionIndex(0);
+      fetchSandboxFiles();
+    } else {
+      setAtMention(null);
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1471,7 +1582,50 @@ export default function AppPage() {
 
           {/* ── Input bar ── */}
           <div className="shrink-0 border-t border-gray-200 dark:border-gray-800 px-3 py-3 sm:px-6 sm:py-4">
-            <div className="mx-auto max-w-2xl">
+            <div className="relative mx-auto max-w-2xl">
+              {/* @ mention file picker */}
+              {atMention && (
+                <div
+                  className="absolute bottom-full left-0 right-0 z-20 mb-1.5 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg"
+                  style={{ backgroundColor: 'var(--bg-card)' }}
+                >
+                  <div className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Sandbox files</span>
+                    {atMentionFetching && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">Loading…</span>
+                    )}
+                  </div>
+                  {(() => {
+                    const filtered = sandboxFiles.filter(f => fuzzyMatch(atMention.query, f)).slice(0, 8);
+                    if (!atMentionFetching && filtered.length === 0) {
+                      return (
+                        <div className="px-3 py-2.5 text-xs text-gray-400 dark:text-gray-500">
+                          {sandboxFiles.length === 0 ? 'No sandbox active for this task' : 'No matching files'}
+                        </div>
+                      );
+                    }
+                    return filtered.map((file, idx) => {
+                      const fileName = file.split('/').pop() ?? file;
+                      const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '';
+                      return (
+                        <button
+                          key={file}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); selectAtFile(file); }}
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${idx === atMentionIndex ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5'}`}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 opacity-50">
+                            <rect x="1" y="2" width="10" height="9" rx="1" stroke="currentColor" strokeWidth="1.2" />
+                            <path d="M1 5h10" stroke="currentColor" strokeWidth="1.2" />
+                          </svg>
+                          <span className="font-medium">{fileName}</span>
+                          {dir && <span className="ml-auto shrink-0 text-xs text-gray-400 dark:text-gray-500">{dir}</span>}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
               {pendingImage && (
                 <div className="mb-2 flex items-center gap-2">
                   <img src={pendingImage} alt="Pending" className="h-14 rounded-lg border border-gray-200 dark:border-gray-700 object-cover" />
@@ -1535,7 +1689,7 @@ export default function AppPage() {
 
               {/* Hint — desktop only */}
               <p className="mt-1.5 hidden text-center text-xs text-gray-400 dark:text-gray-500 sm:block">
-                Enter to send · Shift+Enter for new line · paste images
+                Enter to send · Shift+Enter for new line · paste images · type @ to reference sandbox files
               </p>
             </div>
           </div>

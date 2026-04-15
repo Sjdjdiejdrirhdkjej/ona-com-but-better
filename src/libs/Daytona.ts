@@ -243,3 +243,32 @@ export async function runDaytonaTool(name: string, args: Record<string, unknown>
 export function isDaytonaTool(name: string): boolean {
   return name.startsWith('sandbox_');
 }
+
+export async function deleteSandboxById(sandboxId: string): Promise<void> {
+  try {
+    const daytona = getDaytona();
+    const sandbox = await daytona.get(sandboxId);
+    await daytona.delete(sandbox);
+  } catch {
+  }
+}
+
+export async function listAllSandboxFiles(sandboxId: string): Promise<string[]> {
+  try {
+    const daytona = getDaytona();
+    const sandbox = await daytona.get(sandboxId);
+    const response = await sandbox.process.executeCommand(
+      'find . -type f -maxdepth 6 2>/dev/null | grep -v "node_modules\\|.git\\|\\.next" | head -500',
+      undefined,
+      undefined,
+      30,
+    );
+    const output = response.result ?? '';
+    return output
+      .split('\n')
+      .map(l => l.trim().replace(/^\.\//, ''))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}

@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { conversationsSchema } from '@/models/Schema';
+import { deleteSandboxById } from '@/libs/Daytona';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,6 +18,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  const [conv] = await db
+    .select({ sandboxId: conversationsSchema.sandboxId })
+    .from(conversationsSchema)
+    .where(eq(conversationsSchema.id, id));
+
+  if (conv?.sandboxId) {
+    await deleteSandboxById(conv.sandboxId);
+  }
 
   await db.delete(conversationsSchema).where(eq(conversationsSchema.id, id));
 

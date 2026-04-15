@@ -545,6 +545,12 @@ export async function POST(req: NextRequest) {
                 });
               } else if (isDaytonaTool(toolName)) {
                 result = await runDaytonaTool(toolName, toolArgs);
+                if (toolName === 'sandbox_create' && conversationId) {
+                  const sandboxId = (result as Record<string, unknown>)?.sandbox_id;
+                  if (typeof sandboxId === 'string') {
+                    await db.update(conversationsSchema).set({ sandboxId }).where(eq(conversationsSchema.id, conversationId));
+                  }
+                }
               } else {
                 result = await runGitHubTool(githubToken, toolName, toolArgs);
               }
