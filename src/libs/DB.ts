@@ -13,10 +13,12 @@ const globalForDb = globalThis as unknown as {
 // Need a database for production? Check out https://www.prisma.io/?via=nextjsboilerplate
 // Tested and compatible with Next.js Boilerplate
 const createDbConnection = () => {
+  const isLocal = Env.DATABASE_URL.includes('localhost') || Env.DATABASE_URL.includes('127.0.0.1');
+  const hasSSLParam = Env.DATABASE_URL.includes('ssl=');
   return drizzle({
     connection: {
       connectionString: Env.DATABASE_URL,
-      ssl: !Env.DATABASE_URL.includes('localhost') && !Env.DATABASE_URL.includes('127.0.0.1'),
+      ssl: !isLocal && !hasSSLParam ? true : undefined,
     },
     schema,
   });

@@ -6,7 +6,7 @@
   },
   "scripts": {
     "dev:next": "next dev -p 5000 -H 0.0.0.0",
-    "dev": "run-p db-server:file dev:next",
+    "dev": "next dev -p 5000 -H 0.0.0.0",
     "build:next": "next build",
     "build": "run-p db-server:memory build:* --race",
     "start": "next start -p 5000 -H 0.0.0.0",
