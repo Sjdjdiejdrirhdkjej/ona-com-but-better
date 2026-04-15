@@ -5,7 +5,7 @@ An Ona.com clone — a platform for AI background software engineering agents. T
 
 ## Architecture
 - **Framework**: Next.js 15 with App Router and Turbopack
-- **Database**: PostgreSQL via `DATABASE_URL` using Drizzle ORM; database access stays server-side in API routes/libs
+- **Database**: PostgreSQL using Drizzle ORM; Vercel-style env vars are preferred in this order: `POSTGRES_URL`, `POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING`, `POSTGRES_DATABASE_URL`, then `DATABASE_URL`
 - **ORM**: Drizzle ORM
 - **Styling**: Tailwind CSS v4
 - **i18n**: next-intl with `[locale]` routing, locales en/fr, `as-needed` prefix (so `/app` works without prefix)
@@ -21,7 +21,7 @@ An Ona.com clone — a platform for AI background software engineering agents. T
 - **Build command**: `npm run build`, which runs `next build` directly
 - **Install command**: `npm install --legacy-peer-deps`
 - The build no longer starts a local PGlite server or expands recursive `build:*` scripts.
-- `src/libs/DB.ts` skips Drizzle migrations during Next.js production builds and fails explicitly at runtime if `DATABASE_URL` is missing.
+- `src/libs/DB.ts` skips Drizzle migrations during Next.js production builds and fails explicitly at runtime if no supported database connection string is configured.
 
 ## Key Files
 - `src/app/[locale]/(marketing)/page.tsx` — Full ona.com landing page (hero, features, testimonials, footer)

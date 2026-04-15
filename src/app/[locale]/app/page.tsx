@@ -965,7 +965,10 @@ export default function AppPage() {
         }),
       });
 
-      if (!res.ok) throw new Error(`API error ${res.status}`);
+      if (!res.ok) {
+        const details = await res.text().catch(() => '');
+        throw new Error(details ? `API error ${res.status}: ${details.slice(0, 240)}` : `API error ${res.status}`);
+      }
 
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();

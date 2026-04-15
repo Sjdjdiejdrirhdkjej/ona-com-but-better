@@ -9,7 +9,17 @@ import { callLibrarianToolDefinition, isCallLibrarianTool, runLibrarianSubagent 
 export const runtime = 'nodejs';
 
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
-const MODEL = 'accounts/fireworks/models/kimi-k2p5';
+const DEFAULT_FIREWORKS_MODELS = [
+  'accounts/fireworks/models/kimi-k2p5',
+  'accounts/fireworks/models/kimi-k2-instruct-0905',
+  'accounts/fireworks/models/llama4-maverick-instruct-basic',
+];
+const MODELS = [
+  process.env.FIREWORKS_MODEL,
+  ...(process.env.FIREWORKS_FALLBACK_MODELS?.split(',') ?? DEFAULT_FIREWORKS_MODELS),
+].filter((model): model is string => Boolean(model?.trim()))
+  .map(model => model.trim())
+  .filter((model, index, models) => models.indexOf(model) === index);
 
 const SYSTEM_PROMPT = `You are Ona, an AI background software engineering agent — inspired by ona.com.
 
@@ -264,34 +274,37 @@ function normalizeMessages(messages: ApiMessage[]) {
   });
 }
 
-async function callFireworks(body: Record<string, unknown>, retries = 3): Promise<Response> {
+async function callFireworks(body: Record<string, unknown>): Promise<Response> {
   if (!process.env.FIREWORKS_API_KEY) {
     throw new Error('FIREWORKS_API_KEY is not configured. Please add it in environment secrets.');
   }
 
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt < retries; attempt++) {
-    if (attempt > 0) {
-      await new Promise(r => setTimeout(r, 1000 * attempt));
+  for (const model of MODELS) {
+    let res: Response;
+    try {
+      res = await fetch(FIREWORKS_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.FIREWORKS_API_KEY}`,
+        },
+        body: JSON.stringify({ model, ...body }),
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (error) {
+      if ((error as Error).name === 'TimeoutError') {
+        lastError = new Error(`The AI provider did not respond within 30 seconds for ${model}. Please try again.`);
+        continue;
+      }
+      throw error;
     }
-
-    const res = await fetch(FIREWORKS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.FIREWORKS_API_KEY}`,
-      },
-      body: JSON.stringify({ model: MODEL, ...body }),
-    });
 
     if (res.ok) return res;
 
     if (res.status === 429 || res.status >= 500) {
       lastError = new Error(`The AI model is temporarily busy (${res.status}). Please try again in a moment.`);
-      if (res.status === 429 || res.status === 503) {
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-      }
       continue;
     }
 

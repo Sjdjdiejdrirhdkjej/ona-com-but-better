@@ -9,7 +9,11 @@ const globalForDb = globalThis as unknown as {
   drizzle: NodePgDatabase<typeof schema>;
 };
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.POSTGRES_URL
+  ?? process.env.POSTGRES_PRISMA_URL
+  ?? process.env.POSTGRES_URL_NON_POOLING
+  ?? process.env.POSTGRES_DATABASE_URL
+  ?? process.env.DATABASE_URL;
 const isNextProductionBuild = process.env.NEXT_PHASE === 'phase-production-build';
 
 const createBuildTimeDb = () => {
@@ -22,7 +26,7 @@ const createBuildTimeDb = () => {
 
 const createDbConnection = () => {
   if (!databaseUrl) {
-    throw new Error('DATABASE_URL is not configured. Add a PostgreSQL connection string before using database-backed routes.');
+    throw new Error('No database connection string is configured. Add POSTGRES_URL, POSTGRES_PRISMA_URL, POSTGRES_URL_NON_POOLING, POSTGRES_DATABASE_URL, or DATABASE_URL before using database-backed routes.');
   }
 
   const isLocal = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
