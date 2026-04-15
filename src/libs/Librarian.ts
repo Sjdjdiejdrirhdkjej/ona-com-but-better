@@ -472,10 +472,10 @@ async function librarianCall(messages: LibrarianMessage[]): Promise<{ content: s
       messages,
       tools: INTERNAL_TOOLS,
       tool_choice: 'auto',
-      max_tokens: 5000,
+      max_tokens: 8192,
       temperature: 0.1,
     }),
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(90000),
   });
 
   if (!res.ok) {

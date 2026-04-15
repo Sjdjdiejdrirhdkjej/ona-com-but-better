@@ -259,10 +259,12 @@ type FireworksDelta = {
   }>;
 };
 
+type FinishReason = 'stop' | 'tool_calls' | 'length' | 'error' | null;
+
 type FireworksResponse = {
   choices?: Array<{
     delta?: FireworksDelta;
-    finish_reason?: string;
+    finish_reason?: string | null;
   }>;
   error?: { message?: string };
 };
@@ -291,11 +293,11 @@ async function callFireworks(body: Record<string, unknown>): Promise<Response> {
           Authorization: `Bearer ${process.env.FIREWORKS_API_KEY}`,
         },
         body: JSON.stringify({ model, ...body }),
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(120000),
       });
     } catch (error) {
       if ((error as Error).name === 'TimeoutError') {
-        lastError = new Error(`The AI provider did not respond within 30 seconds for ${model}. Please try again.`);
+        lastError = new Error(`The AI provider did not respond within 120 seconds for ${model}. Please try again.`);
         continue;
       }
       throw error;
@@ -323,12 +325,13 @@ async function callFireworks(body: Record<string, unknown>): Promise<Response> {
 async function streamFireworksCall(
   body: Record<string, unknown>,
   onDelta: (delta: string) => void,
-): Promise<{ content: string; toolCalls: ToolCall[] }> {
+): Promise<{ content: string; toolCalls: ToolCall[]; finishReason: FinishReason }> {
   const res = await callFireworks({ ...body, stream: true });
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let content = '';
+  let finishReason: FinishReason = null;
   const toolCallsMap = new Map<number, { id: string; type: 'function'; function: { name: string; arguments: string } }>();
 
   try {
@@ -345,8 +348,13 @@ async function streamFireworksCall(
         if (raw === '[DONE]') break outer;
         try {
           const json = JSON.parse(raw) as FireworksResponse;
-          const delta = json.choices?.[0]?.delta as FireworksDelta | undefined;
+          const choice = json.choices?.[0];
+          const delta = choice?.delta as FireworksDelta | undefined;
           if (!delta) continue;
+
+          if (choice?.finish_reason) {
+            finishReason = choice.finish_reason as FinishReason;
+          }
 
           if (delta.content) {
             content += delta.content;
@@ -372,7 +380,7 @@ async function streamFireworksCall(
     reader.releaseLock();
   }
 
-  return { content, toolCalls: [...toolCallsMap.values()] };
+  return { content, toolCalls: [...toolCallsMap.values()], finishReason };
 }
 
 function parseToolArgs(value: string): Record<string, unknown> {
@@ -464,7 +472,7 @@ export async function POST(req: NextRequest) {
 
         let text = '';
         await streamFireworksCall(
-          { messages: conversation, max_tokens: 1600, temperature: 0.45 },
+          { messages: conversation, max_tokens: 8192, temperature: 0.45 },
           (delta) => {
             emit({ delta });
             text += delta;
@@ -481,18 +489,18 @@ export async function POST(req: NextRequest) {
         return;
       }
 
-      const MAX_TOOL_ITERATIONS = 10;
+      const MAX_TOOL_ITERATIONS = 25;
       let currentAssistantMsgId = assistantMessageId ?? crypto.randomUUID();
       let currentAssistantText = '';
 
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
         let iterText = '';
-        const { content, toolCalls } = await streamFireworksCall(
+        const { content, toolCalls, finishReason } = await streamFireworksCall(
           {
             messages: conversation,
             tools: [...githubToolDefinitions, ...daytonaToolDefinitions, callLibrarianToolDefinition],
             tool_choice: 'auto',
-            max_tokens: 1400,
+            max_tokens: 16384,
             temperature: 0.3,
           },
           (delta) => {
@@ -501,6 +509,21 @@ export async function POST(req: NextRequest) {
             currentAssistantText += delta;
           },
         );
+
+        if (finishReason === 'length') {
+          const truncatedText = currentAssistantText || iterText || content;
+          if (conversationId && currentAssistantMsgId) {
+            await saveMessage(conversationId, currentAssistantMsgId, 'assistant', truncatedText);
+          }
+          const continueMsg = '\n\n*(Response was very long — continuing…)*';
+          emit({ delta: continueMsg });
+          conversation.push({ role: 'assistant', content: (truncatedText + continueMsg) });
+          currentAssistantText = '';
+          currentAssistantMsgId = crypto.randomUUID();
+          const nextAssistantMsgId = currentAssistantMsgId;
+          emit({ type: 'next_assistant_msg', nextAssistantMsgId });
+          continue;
+        }
 
         if (!toolCalls.length) {
           const finalText = currentAssistantText || iterText || content;
