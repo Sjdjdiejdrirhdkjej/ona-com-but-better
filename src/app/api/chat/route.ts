@@ -556,6 +556,9 @@ export async function POST(req: NextRequest) {
                     if (jobId) persistJobEvent(jobId, 'librarian_step_complete', { parentLabel, step: stepLabel, error: error ?? false }).catch(() => {});
                   }
                 });
+                const report = typeof result === 'string' ? result : JSON.stringify(result);
+                emit({ type: 'librarian_report', parentLabel, report });
+                if (jobId) persistJobEvent(jobId, 'librarian_report', { parentLabel, report }).catch(() => {});
               } else if (isDaytonaTool(toolName)) {
                 result = await runDaytonaTool(toolName, toolArgs);
                 if (toolName === 'sandbox_create' && conversationId) {

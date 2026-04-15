@@ -22,6 +22,7 @@ type ToolStep = {
   label: string;
   status: 'running' | 'done' | 'error';
   subSteps?: SubStep[];
+  librarianReport?: string;
 };
 
 type Message = {
@@ -333,9 +334,19 @@ function ChevronIcon({ open }: { open: boolean }) {
 
 function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
   const [expandedLabels, setExpandedLabels] = useState<Set<string>>(new Set());
+  const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
 
   function toggleLabel(label: string) {
     setExpandedLabels(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
+
+  function toggleReport(label: string) {
+    setExpandedReports(prev => {
       const next = new Set(prev);
       if (next.has(label)) next.delete(label);
       else next.add(label);
@@ -352,7 +363,9 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
       >
         {steps.map((step, i) => {
           const hasSubSteps = !!(step.subSteps && step.subSteps.length > 0);
+          const hasReport = !!step.librarianReport;
           const isOpen = expandedLabels.has(step.label) || (step.status === 'running' && hasSubSteps);
+          const isReportOpen = expandedReports.has(step.label);
           return (
             <div key={i}>
               <div className="flex items-center gap-2">
@@ -380,6 +393,17 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
                     </span>
                   </button>
                 )}
+                {hasReport && (
+                  <button
+                    onClick={() => toggleReport(step.label)}
+                    className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M1.5 2h7M1.5 5h7M1.5 8h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    </svg>
+                    {isReportOpen ? 'Hide report' : 'View report'}
+                  </button>
+                )}
               </div>
               {hasSubSteps && isOpen && (
                 <div className="mt-1.5 ml-4 pl-3 space-y-1 border-l border-gray-200 dark:border-gray-700">
@@ -400,6 +424,11 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
                       </span>
                     </div>
                   ))}
+                </div>
+              )}
+              {hasReport && isReportOpen && (
+                <div className="mt-2 ml-4 rounded-xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
+                  <AssistantMarkdown text={step.librarianReport!} />
                 </div>
               )}
             </div>
@@ -621,6 +650,19 @@ export default function AppPage() {
                               ),
                             }
                           : s,
+                      ),
+                    }
+                  : m,
+              );
+            } else if (ev.type === 'librarian_report') {
+              const parentLabel = ev.data.parentLabel as string;
+              const report = ev.data.report as string;
+              messages = messages.map(m =>
+                m.role === 'tool_steps'
+                  ? {
+                      ...m,
+                      content: (m.content as ToolStep[]).map(s =>
+                        s.label === parentLabel ? { ...s, librarianReport: report } : s,
                       ),
                     }
                   : m,
@@ -999,6 +1041,7 @@ export default function AppPage() {
               nextAssistantMsgId?: string;
               parentLabel?: string;
               step?: string;
+              report?: string;
             };
 
             if (json.type === 'job_id' && json.jobId) {
@@ -1123,6 +1166,24 @@ export default function AppPage() {
                                   ),
                                 }
                               : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'librarian_report' && json.parentLabel && json.report) {
+              const { parentLabel, report } = json as { parentLabel: string; report: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel ? { ...s, librarianReport: report } : s,
                           ),
                         }
                       : m,
