@@ -107,7 +107,10 @@ const TOOL_LABELS: Record<string, string> = {
   sandbox_git_clone: 'Cloning repo into sandbox',
 };
 
-function toolLabel(name: string): string {
+function toolLabel(name: string, args?: Record<string, unknown>): string {
+  if (name === 'sandbox_read_file' && args?.path) {
+    return `Read ${args.path}`;
+  }
   return TOOL_LABELS[name] ?? name.replace('github_', '').replace(/_/g, ' ');
 }
 
@@ -399,7 +402,7 @@ export async function POST(req: NextRequest) {
           currentAssistantText = '';
         }
 
-        const labels = toolCalls.map(t => toolLabel(t.function.name));
+        const labels = toolCalls.map(t => toolLabel(t.function.name, parseToolArgs(t.function.arguments)));
         const toolStepsMsgId = crypto.randomUUID();
         const nextAssistantMsgId = crypto.randomUUID();
         currentAssistantMsgId = nextAssistantMsgId;
@@ -416,12 +419,12 @@ export async function POST(req: NextRequest) {
 
         await Promise.all(
           toolCalls.map(async (toolCall) => {
-            const label = toolLabel(toolCall.function.name);
+            const toolName = toolCall.function.name;
+            const toolArgs = parseToolArgs(toolCall.function.arguments);
+            const label = toolLabel(toolName, toolArgs);
             emit({ type: 'tool_start', tool: label });
             if (jobId) await persistJobEvent(jobId, 'tool_start', { tool: label });
             try {
-              const toolName = toolCall.function.name;
-              const toolArgs = parseToolArgs(toolCall.function.arguments);
               const result = isDaytonaTool(toolName)
                 ? await runDaytonaTool(toolName, toolArgs)
                 : await runGitHubTool(githubToken, toolName, toolArgs);
