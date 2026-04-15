@@ -778,7 +778,10 @@ export default function AppPage() {
     setLoading(true);
 
     const assistantId = crypto.randomUUID();
-    const historyMessages = [...currentConv.messages, userMsg];
+    const historyMessages = [
+      ...currentConv.messages.filter(m => m.role === 'user' || (m.role === 'assistant' && !!m.content)),
+      userMsg,
+    ];
 
     setConversations(prev => prev.map(c =>
       c.id === activeId
