@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { conversationsSchema, messagesSchema } from '@/models/Schema';
+import { agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 
 export async function GET() {
   const conversations = await db
@@ -17,8 +17,16 @@ export async function GET() {
         .where(eq(messagesSchema.conversationId, conv.id))
         .orderBy(messagesSchema.createdAt);
 
+      const runningJobs = await db
+        .select()
+        .from(agentJobsSchema)
+        .where(eq(agentJobsSchema.conversationId, conv.id));
+
+      const activeJob = runningJobs.find(j => j.status === 'running') ?? null;
+
       return {
         ...conv,
+        activeJobId: activeJob?.id ?? null,
         messages: messages.map(m => ({
           ...m,
           content: (() => {

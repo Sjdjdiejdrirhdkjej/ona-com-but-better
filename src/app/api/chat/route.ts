@@ -1,4 +1,7 @@
 import type { NextRequest } from 'next/server';
+import { eq } from 'drizzle-orm';
+import { db } from '@/libs/DB';
+import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/GitHub';
 import { daytonaToolDefinitions, isDaytonaTool, runDaytonaTool } from '@/libs/Daytona';
 
@@ -128,12 +131,6 @@ type ToolCall = {
   };
 };
 
-type FireworksMessage = {
-  role: 'assistant';
-  content?: string | null;
-  tool_calls?: ToolCall[];
-};
-
 type FireworksDelta = {
   content?: string | null;
   tool_calls?: Array<{
@@ -146,7 +143,6 @@ type FireworksDelta = {
 
 type FireworksResponse = {
   choices?: Array<{
-    message?: FireworksMessage;
     delta?: FireworksDelta;
     finish_reason?: string;
   }>;
@@ -286,6 +282,24 @@ function makeStream() {
   return { readable, emit, close };
 }
 
+async function saveMessage(conversationId: string, msgId: string, role: string, content: unknown) {
+  try {
+    await db.insert(messagesSchema).values({
+      id: msgId,
+      conversationId,
+      role,
+      content: typeof content === 'string' ? content : JSON.stringify(content),
+    });
+    await db.update(conversationsSchema).set({ updatedAt: new Date() }).where(eq(conversationsSchema.id, conversationId));
+  } catch {}
+}
+
+async function persistJobEvent(jobId: string, type: string, data: Record<string, unknown> = {}) {
+  try {
+    await db.insert(agentEventsSchema).values({ jobId, type, data: JSON.stringify(data) });
+  } catch {}
+}
+
 export async function POST(req: NextRequest) {
   const { readable, emit, close } = makeStream();
 
@@ -296,8 +310,24 @@ export async function POST(req: NextRequest) {
   };
 
   (async () => {
+    let jobId: string | null = null;
     try {
-      const { messages } = await req.json() as { messages: ApiMessage[] };
+      const body = await req.json() as {
+        messages: ApiMessage[];
+        conversationId?: string;
+        assistantMessageId?: string;
+      };
+
+      const { messages, conversationId, assistantMessageId } = body;
+
+      jobId = crypto.randomUUID();
+
+      if (conversationId) {
+        await db.insert(agentJobsSchema).values({ id: jobId, conversationId, status: 'running' });
+      }
+
+      emit({ type: 'job_id', jobId });
+
       const githubToken = await getGitHubToken();
 
       const conversation: ApiMessage[] = [
@@ -311,20 +341,31 @@ export async function POST(req: NextRequest) {
           content: 'GitHub is not connected for this user. If they ask for any repository action, tell them to connect their GitHub account using the "Connect GitHub" button first. You can still help with general coding questions and planning.',
         });
 
+        let text = '';
         await streamFireworksCall(
-          {
-            messages: conversation,
-            max_tokens: 1600,
-            temperature: 0.45,
+          { messages: conversation, max_tokens: 1600, temperature: 0.45 },
+          (delta) => {
+            emit({ delta });
+            text += delta;
           },
-          (delta) => emit({ delta }),
         );
+
+        if (conversationId && assistantMessageId) {
+          await saveMessage(conversationId, assistantMessageId, 'assistant', text);
+        }
+        if (jobId) {
+          await persistJobEvent(jobId, 'done', {});
+          await db.update(agentJobsSchema).set({ status: 'done' }).where(eq(agentJobsSchema.id, jobId));
+        }
         return;
       }
 
       const MAX_TOOL_ITERATIONS = 10;
+      let currentAssistantMsgId = assistantMessageId ?? crypto.randomUUID();
+      let currentAssistantText = '';
 
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+        let iterText = '';
         const { content, toolCalls } = await streamFireworksCall(
           {
             messages: conversation,
@@ -333,55 +374,97 @@ export async function POST(req: NextRequest) {
             max_tokens: 1400,
             temperature: 0.3,
           },
-          (delta) => emit({ delta }),
+          (delta) => {
+            emit({ delta });
+            iterText += delta;
+            currentAssistantText += delta;
+          },
         );
 
         if (!toolCalls.length) {
-          if (!content) emit({ delta: 'I could not produce a response.' });
+          const finalText = currentAssistantText || iterText || content;
+          if (!finalText) emit({ delta: 'I could not produce a response.' });
+
+          if (conversationId && currentAssistantMsgId) {
+            await saveMessage(conversationId, currentAssistantMsgId, 'assistant', finalText || 'I could not produce a response.');
+          }
+          if (jobId) {
+            await persistJobEvent(jobId, 'done', {});
+          }
           break;
         }
 
-        const labels = toolCalls.map(t => toolLabel(t.function.name));
-        emit({ type: 'tool_call', tools: labels });
+        if (iterText && conversationId && currentAssistantMsgId) {
+          await saveMessage(conversationId, currentAssistantMsgId, 'assistant', iterText);
+          currentAssistantText = '';
+        }
 
-        conversation.push({
-          role: 'assistant',
-          content: content ?? '',
-          tool_calls: toolCalls,
-        });
+        const labels = toolCalls.map(t => toolLabel(t.function.name));
+        const toolStepsMsgId = crypto.randomUUID();
+        const nextAssistantMsgId = crypto.randomUUID();
+        currentAssistantMsgId = nextAssistantMsgId;
+        currentAssistantText = '';
+
+        emit({ type: 'tool_call', tools: labels, toolStepsMsgId, nextAssistantMsgId });
+        if (jobId) {
+          await persistJobEvent(jobId, 'tool_call', { tools: labels, toolStepsMsgId, nextAssistantMsgId });
+        }
+
+        conversation.push({ role: 'assistant', content: content ?? '', tool_calls: toolCalls });
+
+        const toolSteps: Array<{ label: string; status: string }> = labels.map(l => ({ label: l, status: 'running' }));
 
         await Promise.all(
           toolCalls.map(async (toolCall) => {
             const label = toolLabel(toolCall.function.name);
             emit({ type: 'tool_start', tool: label });
+            if (jobId) await persistJobEvent(jobId, 'tool_start', { tool: label });
             try {
               const toolName = toolCall.function.name;
               const toolArgs = parseToolArgs(toolCall.function.arguments);
               const result = isDaytonaTool(toolName)
                 ? await runDaytonaTool(toolName, toolArgs)
                 : await runGitHubTool(githubToken, toolName, toolArgs);
-              conversation.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify(result).slice(0, 24000),
-              });
+              conversation.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result).slice(0, 24000) });
+              const idx = toolSteps.findIndex(s => s.label === label);
+              if (idx !== -1) toolSteps[idx]!.status = 'done';
               emit({ type: 'tool_complete', tool: label });
+              if (jobId) await persistJobEvent(jobId, 'tool_complete', { tool: label });
             } catch (error) {
-              conversation.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: JSON.stringify({ error: (error as Error).message }),
-              });
+              conversation.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ error: (error as Error).message }) });
+              const idx = toolSteps.findIndex(s => s.label === label);
+              if (idx !== -1) toolSteps[idx]!.status = 'error';
               emit({ type: 'tool_complete', tool: label, error: true });
+              if (jobId) await persistJobEvent(jobId, 'tool_complete', { tool: label, error: true });
             }
           }),
         );
 
+        if (conversationId) {
+          const finalSteps = toolSteps.map(s => ({ ...s, status: s.status === 'running' ? 'done' : s.status }));
+          await saveMessage(conversationId, toolStepsMsgId, 'tool_steps', finalSteps);
+        }
+
         emit({ type: 'tool_done' });
+        if (jobId) await persistJobEvent(jobId, 'tool_done', {});
       }
     } catch (error) {
       emit({ type: 'error', message: (error as Error).message });
+      if (jobId) {
+        try {
+          await persistJobEvent(jobId, 'error', { message: (error as Error).message });
+          await db.update(agentJobsSchema).set({ status: 'error' }).where(eq(agentJobsSchema.id, jobId));
+        } catch {}
+      }
     } finally {
+      if (jobId) {
+        try {
+          const jobs = await db.select().from(agentJobsSchema).where(eq(agentJobsSchema.id, jobId));
+          if (jobs[0]?.status === 'running') {
+            await db.update(agentJobsSchema).set({ status: 'done' }).where(eq(agentJobsSchema.id, jobId));
+          }
+        } catch {}
+      }
       close();
     }
   })();

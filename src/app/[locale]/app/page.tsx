@@ -13,10 +13,15 @@ type ContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } };
 
+type ToolStep = {
+  label: string;
+  status: 'running' | 'done' | 'error';
+};
+
 type Message = {
   id: string;
-  role: 'user' | 'assistant';
-  content: string | ContentPart[];
+  role: 'user' | 'assistant' | 'tool_steps';
+  content: string | ContentPart[] | ToolStep[];
   imagePreview?: string;
 };
 
@@ -25,11 +30,7 @@ type Conversation = {
   title: string;
   messages: Message[];
   createdAt: number;
-};
-
-type ToolStep = {
-  label: string;
-  status: 'running' | 'done' | 'error';
+  activeJobId?: string | null;
 };
 
 type GitHubStatus = {
@@ -253,7 +254,9 @@ function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user';
   const text = typeof msg.content === 'string'
     ? msg.content
-    : (msg.content.find(p => p.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? '';
+    : Array.isArray(msg.content) && (msg.content as ContentPart[])[0]?.type === 'text'
+      ? ((msg.content as ContentPart[]).find(p => p.type === 'text') as { type: 'text'; text: string } | undefined)?.text ?? ''
+      : '';
 
   return (
     <div className={`group flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -307,27 +310,7 @@ function ToolStepIcon({ status }: { status: ToolStep['status'] }) {
   );
 }
 
-function TypingIndicator({ steps }: { steps: ToolStep[] }) {
-  if (steps.length === 0) {
-    return (
-      <div className="flex justify-start">
-        <OnaAvatar />
-        <div
-          className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm border border-gray-200 dark:border-gray-700 px-4 py-3"
-          style={{ backgroundColor: 'var(--bg-2)' }}
-        >
-          {[0, 1, 2].map(i => (
-            <span
-              key={i}
-              className="size-1.5 rounded-full bg-gray-400"
-              style={{ animation: `ona-pulse 1s ease-in-out ${i * 0.2}s infinite` }}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
+function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
   return (
     <div className="flex justify-start">
       <OnaAvatar />
@@ -357,6 +340,44 @@ function TypingIndicator({ steps }: { steps: ToolStep[] }) {
   );
 }
 
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <OnaAvatar />
+      <div
+        className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm border border-gray-200 dark:border-gray-700 px-4 py-3"
+        style={{ backgroundColor: 'var(--bg-2)' }}
+      >
+        {[0, 1, 2].map(i => (
+          <span
+            key={i}
+            className="size-1.5 rounded-full bg-gray-400"
+            style={{ animation: `ona-pulse 1s ease-in-out ${i * 0.2}s infinite` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BackgroundWorkingBanner() {
+  return (
+    <div className="flex justify-start">
+      <OnaAvatar />
+      <div
+        className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-indigo-200 dark:border-indigo-800 px-4 py-3"
+        style={{ backgroundColor: 'var(--bg-2)' }}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 text-indigo-400" style={{ animation: 'ona-spin 1s linear infinite' }}>
+          <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3" strokeOpacity="0.25" />
+          <path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+        <span className="text-xs text-indigo-500 dark:text-indigo-400">Working in background…</span>
+      </div>
+    </div>
+  );
+}
+
 function newConversation(): Conversation {
   return { id: crypto.randomUUID(), title: 'New task', messages: [], createdAt: Date.now() };
 }
@@ -373,9 +394,8 @@ export default function AppPage() {
   const [search, setSearch] = useState('');
   const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null);
   const [deviceAuth, setDeviceAuth] = useState<DeviceAuthState | null>(null);
-  const [toolSteps, setToolSteps] = useState<ToolStep[]>([]);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const toolClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bgPollTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -392,6 +412,7 @@ export default function AppPage() {
           id: string;
           title: string;
           createdAt: string;
+          activeJobId: string | null;
           messages: Array<{ id: string; role: string; content: unknown }>;
         }>;
 
@@ -400,14 +421,21 @@ export default function AppPage() {
             id: c.id,
             title: c.title,
             createdAt: new Date(c.createdAt).getTime(),
+            activeJobId: c.activeJobId,
             messages: c.messages.map(m => ({
               id: m.id,
-              role: m.role as 'user' | 'assistant',
-              content: m.content as string | ContentPart[],
+              role: m.role as Message['role'],
+              content: m.content as Message['content'],
             })),
           }));
           loaded.forEach(c => syncedIds.current.add(c.id));
           setConversations([newConversation(), ...loaded]);
+
+          loaded.forEach(c => {
+            if (c.activeJobId) {
+              scheduleBackgroundPoll(c.id, c.activeJobId, 0);
+            }
+          });
         } else {
           setConversations([newConversation()]);
         }
@@ -419,6 +447,141 @@ export default function AppPage() {
     }
     loadHistory();
   }, []);
+
+  function scheduleBackgroundPoll(convId: string, jobId: string, cursor: number) {
+    const existing = bgPollTimersRef.current.get(convId);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => pollBackgroundJob(convId, jobId, cursor), 3000);
+    bgPollTimersRef.current.set(convId, timer);
+  }
+
+  async function pollBackgroundJob(convId: string, jobId: string, cursor: number) {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/events?after=${cursor}`);
+      if (!res.ok) {
+        stopBackgroundPoll(convId);
+        return;
+      }
+      const data = await res.json() as {
+        events: Array<{ id: number; type: string; data: Record<string, unknown> }>;
+        done: boolean;
+        status: string;
+      };
+
+      if (data.events.length > 0 || data.done) {
+        const lastId = data.events.at(-1)?.id ?? cursor;
+
+        setConversations(prev => {
+          const conv = prev.find(c => c.id === convId);
+          if (!conv) return prev;
+
+          let messages = [...conv.messages];
+
+          for (const ev of data.events) {
+            if (ev.type === 'tool_call') {
+              const tools = (ev.data.tools as string[]) ?? [];
+              const toolStepsMsgId = ev.data.toolStepsMsgId as string ?? crypto.randomUUID();
+              const nextAssistantMsgId = ev.data.nextAssistantMsgId as string ?? crypto.randomUUID();
+              messages = messages.filter(m => !(m.role === 'assistant' && m.content === ''));
+              messages.push({ id: toolStepsMsgId, role: 'tool_steps', content: tools.map(l => ({ label: l, status: 'running' as const })) });
+              messages.push({ id: nextAssistantMsgId, role: 'assistant', content: '' });
+            } else if (ev.type === 'tool_start') {
+              const tool = ev.data.tool as string;
+              messages = messages.map(m =>
+                m.role === 'tool_steps'
+                  ? { ...m, content: (m.content as ToolStep[]).map(s => s.label === tool ? { ...s, status: 'running' as const } : s) }
+                  : m,
+              );
+            } else if (ev.type === 'tool_complete') {
+              const tool = ev.data.tool as string;
+              const hasError = !!ev.data.error;
+              messages = messages.map(m =>
+                m.role === 'tool_steps'
+                  ? { ...m, content: (m.content as ToolStep[]).map(s => s.label === tool ? { ...s, status: (hasError ? 'error' : 'done') as ToolStep['status'] } : s) }
+                  : m,
+              );
+            } else if (ev.type === 'tool_done') {
+              messages = messages.map(m =>
+                m.role === 'tool_steps'
+                  ? { ...m, content: (m.content as ToolStep[]).map(s => ({ ...s, status: s.status === 'running' ? 'done' as const : s.status })) }
+                  : m,
+              );
+            } else if (ev.type === 'content') {
+              const text = ev.data.text as string ?? '';
+              const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+              if (lastAssistant) {
+                messages = messages.map(m =>
+                  m.id === lastAssistant.id
+                    ? { ...m, content: (typeof m.content === 'string' ? m.content : '') + text }
+                    : m,
+                );
+              }
+            }
+          }
+
+          if (data.done) {
+            const updatedConv = { ...conv, messages, activeJobId: null };
+            return prev.map(c => c.id === convId ? updatedConv : c);
+          }
+          return prev.map(c => c.id === convId ? { ...c, messages } : c);
+        });
+
+        if (!data.done) {
+          scheduleBackgroundPoll(convId, jobId, lastId);
+        } else {
+          stopBackgroundPoll(convId);
+          refreshConversationMessages(convId);
+        }
+      } else {
+        if (!data.done) {
+          scheduleBackgroundPoll(convId, jobId, cursor);
+        } else {
+          stopBackgroundPoll(convId);
+          refreshConversationMessages(convId);
+        }
+      }
+    } catch {
+      scheduleBackgroundPoll(convId, jobId, cursor);
+    }
+  }
+
+  function stopBackgroundPoll(convId: string) {
+    const timer = bgPollTimersRef.current.get(convId);
+    if (timer) {
+      clearTimeout(timer);
+      bgPollTimersRef.current.delete(convId);
+    }
+  }
+
+  async function refreshConversationMessages(convId: string) {
+    try {
+      const res = await fetch('/api/conversations');
+      if (!res.ok) return;
+      const data = await res.json() as Array<{
+        id: string;
+        title: string;
+        createdAt: string;
+        activeJobId: string | null;
+        messages: Array<{ id: string; role: string; content: unknown }>;
+      }>;
+      const found = data.find(c => c.id === convId);
+      if (!found) return;
+      setConversations(prev => prev.map(c =>
+        c.id === convId
+          ? {
+              ...c,
+              activeJobId: null,
+              messages: found.messages.map(m => ({
+                id: m.id,
+                role: m.role as Message['role'],
+                content: m.content as Message['content'],
+              })),
+            }
+          : c,
+      ));
+    } catch {}
+  }
 
   useEffect(() => {
     async function loadGitHubStatus() {
@@ -451,6 +614,7 @@ export default function AppPage() {
         user_code?: string;
         verification_uri?: string;
         interval?: number;
+        expires_in?: number;
         error?: string;
       };
       if (!res.ok || !data.device_code) {
@@ -566,6 +730,7 @@ export default function AppPage() {
 
   async function deleteConversation(id: string, e: React.MouseEvent) {
     e.stopPropagation();
+    stopBackgroundPoll(id);
     if (syncedIds.current.has(id)) {
       try {
         await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
@@ -625,7 +790,6 @@ export default function AppPage() {
         : c,
     ));
 
-    // Persist to DB
     const convId = activeId;
     const convTitle = isFirstMessage ? title : currentConv.title;
     if (!syncedIds.current.has(convId)) {
@@ -656,7 +820,8 @@ export default function AppPage() {
       });
     } catch {}
 
-    let assistantText = '';
+    // Tracks which assistant message is being filled with deltas
+    let currentAssistantId = assistantId;
 
     try {
       const res = await fetch('/api/chat', {
@@ -664,6 +829,8 @@ export default function AppPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: historyMessages.map(m => ({ role: m.role, content: m.content })),
+          conversationId: convId,
+          assistantMessageId: assistantId,
         }),
       });
 
@@ -693,46 +860,104 @@ export default function AppPage() {
               tool?: string;
               error?: boolean;
               message?: string;
+              jobId?: string;
+              toolStepsMsgId?: string;
+              nextAssistantMsgId?: string;
             };
 
-            if (json.type === 'tool_call' && json.tools?.length) {
-              if (toolClearTimerRef.current) {
-                clearTimeout(toolClearTimerRef.current);
-                toolClearTimerRef.current = null;
-              }
-              setToolSteps(json.tools.map((label: string) => ({ label, status: 'running' as const })));
+            if (json.type === 'job_id' && json.jobId) {
+              const jobId = json.jobId;
+              setConversations(prev => prev.map(c =>
+                c.id === convId ? { ...c, activeJobId: jobId } : c,
+              ));
+            } else if (json.type === 'tool_call' && json.tools?.length) {
+              const toolStepsMsgId = json.toolStepsMsgId ?? crypto.randomUUID();
+              const nextAssistantMsgId = json.nextAssistantMsgId ?? crypto.randomUUID();
+              currentAssistantId = nextAssistantMsgId;
+
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                const newSteps: Message = {
+                  id: toolStepsMsgId,
+                  role: 'tool_steps',
+                  content: json.tools!.map((label: string) => ({ label, status: 'running' as const })),
+                };
+                const newAssistant: Message = {
+                  id: nextAssistantMsgId,
+                  role: 'assistant',
+                  content: '',
+                };
+                return { ...c, messages: [...c.messages, newSteps, newAssistant] };
+              }));
             } else if (json.type === 'tool_start' && json.tool) {
-              setToolSteps(prev =>
-                prev.some(s => s.label === json.tool)
-                  ? prev.map(s => s.label === json.tool ? { ...s, status: 'running' as const } : s)
-                  : [...prev, { label: json.tool as string, status: 'running' as const }],
-              );
+              const tool = json.tool;
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === tool ? { ...s, status: 'running' as const } : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
             } else if (json.type === 'tool_complete' && json.tool) {
-              setToolSteps(prev =>
-                prev.map(s =>
-                  s.label === json.tool
-                    ? { ...s, status: (json.error ? 'error' : 'done') as ToolStep['status'] }
-                    : s,
-                ),
-              );
+              const tool = json.tool;
+              const hasError = !!json.error;
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === tool
+                              ? { ...s, status: (hasError ? 'error' : 'done') as ToolStep['status'] }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
             } else if (json.type === 'tool_done') {
-              setToolSteps(prev => prev.map(s => ({ ...s, status: 'done' as const })));
-              toolClearTimerRef.current = setTimeout(() => {
-                setToolSteps([]);
-                toolClearTimerRef.current = null;
-              }, 1500);
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s => ({
+                            ...s,
+                            status: s.status === 'running' ? 'done' as const : s.status,
+                          })),
+                        }
+                      : m,
+                  ),
+                };
+              }));
             } else if (json.type === 'error' && json.message) {
               throw new Error(json.message);
             } else if (json.delta) {
               const delta = json.delta;
-              assistantText += delta;
+              const targetId = currentAssistantId;
               setConversations(prev =>
                 prev.map(c =>
-                  c.id === activeId
+                  c.id === convId
                     ? {
                         ...c,
                         messages: c.messages.map(m =>
-                          m.id === assistantId
+                          m.id === targetId
                             ? { ...m, content: (typeof m.content === 'string' ? m.content : '') + delta }
                             : m,
                         ),
@@ -747,15 +972,16 @@ export default function AppPage() {
         }
       }
     } catch (err) {
-      assistantText = `Something went wrong: ${(err as Error).message}`;
+      const errText = `Something went wrong: ${(err as Error).message}`;
+      const targetId = currentAssistantId;
       setConversations(prev =>
         prev.map(c =>
-          c.id === activeId
+          c.id === convId
             ? {
                 ...c,
                 messages: c.messages.map(m =>
-                  m.id === assistantId
-                    ? { ...m, content: assistantText }
+                  m.id === targetId
+                    ? { ...m, content: errText }
                     : m,
                 ),
               }
@@ -764,22 +990,9 @@ export default function AppPage() {
       );
     } finally {
       setLoading(false);
-      if (toolClearTimerRef.current) {
-        clearTimeout(toolClearTimerRef.current);
-        toolClearTimerRef.current = null;
-      }
-      setToolSteps([]);
-    }
-
-    // Save assistant message
-    if (assistantText) {
-      try {
-        await fetch(`/api/conversations/${convId}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messageId: assistantId, role: 'assistant', content: assistantText }),
-        });
-      } catch {}
+      setConversations(prev => prev.map(c =>
+        c.id === convId ? { ...c, activeJobId: null } : c,
+      ));
     }
   }, [activeId, conversations, loading]);
 
@@ -818,6 +1031,11 @@ export default function AppPage() {
 
   const isEmpty = messages.length === 0;
   const canSend = !!(input.trim() || pendingImage) && !loading;
+  const isBackgroundRunning = !loading && !!activeConversation?.activeJobId;
+  const visibleAgentMsgs = messages.filter(m =>
+    m.role === 'tool_steps' || (m.role === 'assistant' && !!m.content),
+  );
+  const showTypingIndicator = loading && visibleAgentMsgs.length === 0;
 
   const sidebarContent = (
     <>
@@ -889,32 +1107,40 @@ export default function AppPage() {
                 );
               }
               return filtered.map(c => (
-            <div
-              key={c.id}
-              className={`group relative flex w-full items-start rounded-xl px-3 py-3 text-left transition-colors ${
-                c.id === activeId
-                  ? 'bg-black/8 dark:bg-white/10 text-gray-900 dark:text-gray-100'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/8 dark:active:bg-white/10'
-              }`}
-            >
-              <button
-                onClick={() => { setActiveId(c.id); closeSidebarOnMobile(); }}
-                className="min-w-0 flex-1 text-left"
-                aria-label={`Switch to task: ${c.title}`}
-              >
-                <p className="truncate pr-6 text-sm font-medium leading-tight">{c.title}</p>
-                <p suppressHydrationWarning className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{relativeTime(c.createdAt)}</p>
-              </button>
-              <button
-                onClick={e => deleteConversation(c.id, e)}
-                className="delete-btn absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 dark:text-gray-600 opacity-0 transition-opacity hover:text-gray-600 dark:hover:text-gray-400 group-hover:opacity-100"
-                aria-label="Delete task"
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
+                <div
+                  key={c.id}
+                  className={`group relative flex w-full items-start rounded-xl px-3 py-3 text-left transition-colors ${
+                    c.id === activeId
+                      ? 'bg-black/8 dark:bg-white/10 text-gray-900 dark:text-gray-100'
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/8 dark:active:bg-white/10'
+                  }`}
+                >
+                  <button
+                    onClick={() => { setActiveId(c.id); closeSidebarOnMobile(); }}
+                    className="min-w-0 flex-1 text-left"
+                    aria-label={`Switch to task: ${c.title}`}
+                  >
+                    <div className="flex items-center gap-1.5 pr-6">
+                      <p className="truncate text-sm font-medium leading-tight">{c.title}</p>
+                      {c.activeJobId && (
+                        <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="shrink-0 text-indigo-400" style={{ animation: 'ona-spin 1s linear infinite' }}>
+                          <circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+                          <path d="M4 1A3 3 0 017 4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <p suppressHydrationWarning className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{relativeTime(c.createdAt)}</p>
+                  </button>
+                  <button
+                    onClick={e => deleteConversation(c.id, e)}
+                    className="delete-btn absolute right-2 top-3 shrink-0 rounded p-1 text-gray-300 dark:text-gray-600 opacity-0 transition-opacity hover:text-gray-600 dark:hover:text-gray-400 group-hover:opacity-100"
+                    aria-label="Delete task"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                </div>
               ));
             })()}
       </div>
@@ -1055,10 +1281,19 @@ export default function AppPage() {
                 )
               : (
                   <div className="mx-auto max-w-2xl space-y-5">
-                    {messages.filter(m => m.role === 'user' || !!m.content).map(msg => (
-                      <MessageBubble key={msg.id} msg={msg} />
-                    ))}
-                    {loading && (!messages.at(-1)?.content || toolSteps.length > 0) && <TypingIndicator steps={toolSteps} />}
+                    {messages
+                      .filter(m => m.role === 'tool_steps' || m.role === 'user' || !!m.content)
+                      .map(msg => (
+                        msg.role === 'tool_steps'
+                          ? <ToolStepsBlock key={msg.id} steps={msg.content as ToolStep[]} />
+                          : <MessageBubble key={msg.id} msg={msg} />
+                      ))}
+                    {showTypingIndicator && (
+                      <TypingIndicator />
+                    )}
+                    {isBackgroundRunning && (
+                      <BackgroundWorkingBanner />
+                    )}
                     <div ref={bottomRef} />
                   </div>
                 )}
@@ -1147,100 +1382,49 @@ export default function AppPage() {
             className="w-full max-w-sm rounded-2xl border border-gray-200 dark:border-gray-700 p-7 shadow-2xl"
             style={{ backgroundColor: 'var(--bg)' }}
           >
-            <div className="mb-5 flex items-start justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Connect GitHub</h2>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Device authorization flow</p>
-              </div>
-              <button
-                onClick={cancelDeviceAuth}
-                className="rounded-lg p-1 text-gray-400 dark:text-gray-500 hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-700 dark:hover:text-gray-300"
-                aria-label="Cancel"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
+            <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">Connect GitHub</h2>
+            <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">
+              Authorize Ona to access your repositories.
+            </p>
 
             {deviceAuth.status === 'error'
               ? (
-                  <div className="space-y-4">
-                    <p className="rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/50 px-3 py-2 text-sm text-red-700 dark:text-red-300">
-                      {deviceAuth.errorMsg ?? 'Something went wrong.'}
-                    </p>
-                    <button
-                      onClick={cancelDeviceAuth}
-                      className="w-full rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:opacity-85"
-                    >
-                      Dismiss
-                    </button>
+                  <div className="rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 px-4 py-3">
+                    <p className="text-sm text-red-700 dark:text-red-400">{deviceAuth.errorMsg ?? 'An error occurred.'}</p>
                   </div>
                 )
               : (
-                  <div className="space-y-5">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Visit the URL below and enter the code to authorize Ona.
+                  <>
+                    <p className="mb-2 text-center text-xs text-gray-500 dark:text-gray-400">
+                      1. Go to
+                      {' '}
+                      <a href={deviceAuth.verification_uri} target="_blank" rel="noopener noreferrer" className="font-medium text-indigo-600 dark:text-indigo-400 underline">
+                        {deviceAuth.verification_uri}
+                      </a>
                     </p>
-
-                    {/* Code display */}
-                    <div className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-4 text-center">
-                      <p className="mb-1 text-xs font-medium uppercase tracking-widest text-gray-400 dark:text-gray-500">Your code</p>
-                      <p className="font-mono text-2xl font-bold tracking-widest text-gray-900 dark:text-gray-100">
+                    <p className="mb-3 text-center text-xs text-gray-500 dark:text-gray-400">2. Enter this code:</p>
+                    <div className="rounded-xl border-2 border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 px-4 py-3 text-center">
+                      <span className="font-mono text-xl font-bold tracking-widest text-indigo-700 dark:text-indigo-300">
                         {deviceAuth.user_code}
-                      </p>
-                      <CopyDeviceCode code={deviceAuth.user_code} />
+                      </span>
                     </div>
-
-                    {/* Open GitHub button */}
-                    <a
-                      href={deviceAuth.verification_uri}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:opacity-85"
-                    >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.77.4.08.55-.18.55-.4 0-.2-.01-.86-.01-1.56-2.01.38-2.53-.5-2.69-.95-.09-.23-.48-.95-.82-1.14-.28-.16-.68-.55-.01-.56.63-.01 1.08.59 1.23.83.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.37 7.37 0 018 3.95c.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.25.54.74.54 1.5 0 1.09-.01 1.96-.01 2.23 0 .22.15.48.55.4A8.13 8.13 0 0016 8.2C16 3.67 12.42 0 8 0z" />
-                      </svg>
-                      Open {deviceAuth.verification_uri.replace('https://', '')}
-                    </a>
-
-                    {/* Polling indicator */}
-                    <div className="flex items-center justify-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-                      <span
-                        className="inline-block size-1.5 rounded-full bg-green-400"
-                        style={{ animation: 'ona-pulse 1.2s ease-in-out infinite' }}
-                      />
-                      Waiting for authorization…
+                    <CopyDeviceCode code={deviceAuth.user_code} />
+                    <div className="mt-3">
+                      <CountdownTimer expiresAt={deviceAuth.expires_at} onExpired={() => setDeviceAuth(prev => prev ? { ...prev, status: 'error', errorMsg: 'Code expired. Please try again.' } : null)} />
                     </div>
-
-                    {/* Countdown */}
-                    <CountdownTimer
-                      expiresAt={deviceAuth.expires_at}
-                      onExpired={() => {
-                        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-                        setDeviceAuth(prev => prev
-                          ? { ...prev, status: 'error', errorMsg: 'Code expired. Click "Connect GitHub" to try again.' }
-                          : prev);
-                      }}
-                    />
-                  </div>
+                    <p className="mt-3 text-center text-xs text-gray-400 dark:text-gray-500">Waiting for authorization…</p>
+                  </>
                 )}
+
+            <button
+              onClick={cancelDeviceAuth}
+              className="mt-5 w-full rounded-xl border border-gray-200 dark:border-gray-700 py-2.5 text-sm text-gray-600 dark:text-gray-400 transition-colors hover:border-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes ona-pulse {
-          0%, 100% { transform: scale(1); opacity: 0.4; }
-          50% { transform: scale(1.3); opacity: 1; }
-        }
-        @media (hover: none) {
-          .delete-btn { opacity: 1 !important; }
-          .copy-btn { opacity: 1 !important; }
-        }
-      `}
-      </style>
     </div>
   );
 }

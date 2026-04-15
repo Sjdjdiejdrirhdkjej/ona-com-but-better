@@ -30,3 +30,22 @@ export const messagesSchema = pgTable('messages', {
   content: text('content').notNull(),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
 });
+
+export const agentJobsSchema = pgTable('agent_jobs', {
+  id: text('id').primaryKey(),
+  conversationId: text('conversation_id')
+    .notNull()
+    .references(() => conversationsSchema.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('running'),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+});
+
+export const agentEventsSchema = pgTable('agent_events', {
+  id: serial('id').primaryKey(),
+  jobId: text('job_id')
+    .notNull()
+    .references(() => agentJobsSchema.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  data: text('data').notNull().default('{}'),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+});

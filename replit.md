@@ -37,7 +37,20 @@ An Ona.com clone — a platform for AI background software engineering agents. T
 - Real streaming AI responses via `src/app/api/chat/route.ts`
 - Image upload (file picker button) and paste-from-clipboard support
 - System prompt positions Ona as a background software engineering agent platform
-- Suggestion chips: Weekly digest, Review PRs, Find CVEs, COBOL migration
+- Suggestion chips: Inspect repos, Clone a repo, Review PRs, Find CVEs
+
+## Background Agent System
+- **Persistent tool steps**: Tool call batches (e.g., "Reading file", "Creating branch") are saved as `tool_steps` messages in the DB and rendered permanently in the conversation — they never disappear
+- **Background execution**: The agent loop runs as a detached server-side async. If the tab closes, work continues on the server. Progress is written to `agent_events` table in real-time
+- **Reconnect polling**: On page load, conversations with an active job ID start polling `/api/jobs/[jobId]/events?after=<cursor>` every 3 seconds. Events are replayed to reconstruct state
+- **Server-side message saving**: The API route saves both `tool_steps` messages and `assistant` messages directly to the `messages` table — the frontend no longer saves assistant messages
+- **`BackgroundWorkingBanner`**: Shows "Working in background…" indicator in the chat when the agent is running after SSE disconnect
+
+## Database Schema
+- `conversations` — conversation records
+- `messages` — chat messages; `role` can be `user`, `assistant`, or `tool_steps` (JSON array of ToolStep)
+- `agent_jobs` — one per `/api/chat` call; status: `running | done | error`
+- `agent_events` — sequential event log per job (tool_call, tool_start, tool_complete, tool_done, content, error, done)
 
 ## Development
 ```bash
