@@ -490,6 +490,9 @@ export default function AppPage() {
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [selectedModel, setSelectedModel] = useState<string>('ona-max-fast');
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const modelMenuRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
   const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null);
   const [deviceAuth, setDeviceAuth] = useState<DeviceAuthState | null>(null);
@@ -876,6 +879,17 @@ export default function AppPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
+        setModelMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [modelMenuOpen]);
+
   // Prevent body scroll when mobile sidebar is open
   useEffect(() => {
     if (isMobile && sidebarOpen) {
@@ -1008,6 +1022,7 @@ export default function AppPage() {
           messages: historyMessages.map(m => ({ role: m.role, content: m.content })),
           conversationId: convId,
           assistantMessageId: assistantId,
+          model: selectedModel,
         }),
         signal: abortController.signal,
       });
@@ -1248,7 +1263,7 @@ export default function AppPage() {
         c.id === convId ? { ...c, activeJobId: null } : c,
       ));
     }
-  }, [activeId, conversations, loading]);
+  }, [activeId, conversations, loading, selectedModel]);
 
   function stopGeneration() {
     abortControllerRef.current?.abort();
@@ -1721,6 +1736,56 @@ export default function AppPage() {
                   </button>
                 </div>
               )}
+
+              {/* Model selector */}
+              {(() => {
+                const MODEL_OPTIONS = [
+                  { key: 'ona-max', label: 'Ona Max', sub: 'Kimi K2.5' },
+                  { key: 'ona-max-fast', label: 'Ona Max Fast', sub: 'Kimi K2.5 Turbo' },
+                  { key: 'ona-mini', label: 'Ona Mini', sub: 'MiniMax M2.7' },
+                ] as const;
+                const current = MODEL_OPTIONS.find(m => m.key === selectedModel) ?? MODEL_OPTIONS[1];
+                return (
+                  <div ref={modelMenuRef} className="relative mb-1.5 flex">
+                    <button
+                      type="button"
+                      onClick={() => setModelMenuOpen(o => !o)}
+                      className="flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1 text-xs text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0 text-indigo-500">
+                        <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.4" />
+                        <path d="M5 3v2.5L6.5 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                      </svg>
+                      {current.label}
+                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className={`shrink-0 transition-transform ${modelMenuOpen ? 'rotate-180' : ''}`}>
+                        <path d="M1.5 3L4 5.5L6.5 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                    {modelMenuOpen && (
+                      <div className="absolute bottom-full left-0 mb-1.5 z-50 w-52 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-2)' }}>
+                        {MODEL_OPTIONS.map(opt => (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => { setSelectedModel(opt.key); setModelMenuOpen(false); }}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 ${selectedModel === opt.key ? 'bg-gray-50 dark:bg-gray-800/60' : ''}`}
+                          >
+                            <span>
+                              <span className="block text-xs font-medium text-gray-900 dark:text-gray-100">{opt.label}</span>
+                              <span className="block text-xs text-gray-400 dark:text-gray-500">{opt.sub}</span>
+                            </span>
+                            {selectedModel === opt.key && (
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-indigo-500">
+                                <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div
                 suppressHydrationWarning

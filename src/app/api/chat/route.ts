@@ -9,12 +9,33 @@ import { callLibrarianToolDefinition, isCallLibrarianTool, runLibrarianSubagent 
 export const runtime = 'nodejs';
 
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
+
+export const ONA_MODELS = {
+  'ona-max': {
+    label: 'Ona Max',
+    description: 'Kimi K2.5 — most capable',
+    fireworksId: 'accounts/fireworks/models/kimi-k2p5-instruct',
+  },
+  'ona-max-fast': {
+    label: 'Ona Max Fast',
+    description: 'Kimi K2.5 Turbo — fast & smart',
+    fireworksId: 'accounts/fireworks/routers/kimi-k2p5-turbo',
+  },
+  'ona-mini': {
+    label: 'Ona Mini',
+    description: 'MiniMax M2.7 — lightweight',
+    fireworksId: 'accounts/fireworks/models/minimax-m2-7',
+  },
+} as const;
+
+export type OnaModelKey = keyof typeof ONA_MODELS;
+
 const DEFAULT_FIREWORKS_MODELS = [
   'accounts/fireworks/routers/kimi-k2p5-turbo',
   'accounts/fireworks/models/kimi-k2-instruct-0905',
   'accounts/fireworks/models/llama4-maverick-instruct-basic',
 ];
-const MODELS = [
+const FALLBACK_MODELS = [
   process.env.FIREWORKS_MODEL,
   ...(process.env.FIREWORKS_FALLBACK_MODELS?.split(',') ?? DEFAULT_FIREWORKS_MODELS),
 ].filter((model): model is string => Boolean(model?.trim()))
@@ -276,14 +297,15 @@ function normalizeMessages(messages: ApiMessage[]) {
   });
 }
 
-async function callFireworks(body: Record<string, unknown>): Promise<Response> {
+async function callFireworks(body: Record<string, unknown>, modelOverride?: string): Promise<Response> {
   if (!process.env.FIREWORKS_API_KEY) {
     throw new Error('FIREWORKS_API_KEY is not configured. Please add it in environment secrets.');
   }
 
+  const modelsToTry = modelOverride ? [modelOverride] : FALLBACK_MODELS;
   let lastError: Error | null = null;
 
-  for (const model of MODELS) {
+  for (const model of modelsToTry) {
     let res: Response;
     try {
       res = await fetch(FIREWORKS_API_URL, {
@@ -325,8 +347,9 @@ async function callFireworks(body: Record<string, unknown>): Promise<Response> {
 async function streamFireworksCall(
   body: Record<string, unknown>,
   onDelta: (delta: string) => void,
+  modelOverride?: string,
 ): Promise<{ content: string; toolCalls: ToolCall[]; finishReason: FinishReason }> {
-  const res = await callFireworks({ ...body, stream: true });
+  const res = await callFireworks({ ...body, stream: true }, modelOverride);
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -445,9 +468,13 @@ export async function POST(req: NextRequest) {
         messages: ApiMessage[];
         conversationId?: string;
         assistantMessageId?: string;
+        model?: string;
       };
 
-      const { messages, conversationId, assistantMessageId } = body;
+      const { messages, conversationId, assistantMessageId, model } = body;
+      const fireworksModelId = model && model in ONA_MODELS
+        ? ONA_MODELS[model as OnaModelKey].fireworksId
+        : undefined;
 
       jobId = crypto.randomUUID();
 
@@ -477,6 +504,7 @@ export async function POST(req: NextRequest) {
             emit({ delta });
             text += delta;
           },
+          fireworksModelId,
         );
 
         if (conversationId && assistantMessageId) {
@@ -507,6 +535,7 @@ export async function POST(req: NextRequest) {
             iterText += delta;
             currentAssistantText += delta;
           },
+          fireworksModelId,
         );
 
         if (finishReason === 'length') {
