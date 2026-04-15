@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 
 export function ThemeToggle() {
+  const [mounted, setMounted] = useState(false);
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains('dark'));
+    setMounted(true);
   }, []);
 
   function toggle() {
@@ -23,8 +25,9 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
       className="flex size-8 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/8"
+      suppressHydrationWarning
     >
-      {dark
+      {mounted && (dark
         ? (
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.4" />
@@ -35,7 +38,7 @@ export function ThemeToggle() {
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
               <path d="M7.5 1a6.5 6.5 0 000 13 6.5 6.5 0 000-13zm0 0a4.5 4.5 0 010 9A4.5 4.5 0 010 7.5 6.497 6.497 0 007.5 1z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-          )}
+          ))}
     </button>
   );
 }
