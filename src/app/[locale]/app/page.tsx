@@ -1043,10 +1043,10 @@ export default function AppPage() {
                 )
               : (
                   <div className="mx-auto max-w-2xl space-y-5">
-                    {messages.map(msg => (
+                    {messages.filter(m => m.role === 'user' || !!m.content).map(msg => (
                       <MessageBubble key={msg.id} msg={msg} />
                     ))}
-                    {loading && messages.at(-1)?.role !== 'assistant' && <TypingIndicator steps={toolSteps} />}
+                    {loading && !messages.at(-1)?.content && <TypingIndicator steps={toolSteps} />}
                     <div ref={bottomRef} />
                   </div>
                 )}
