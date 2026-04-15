@@ -1,1 +1,1 @@
-ALTER TABLE "conversations" ADD COLUMN "sandbox_id" text;
+ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "sandbox_id" text;
