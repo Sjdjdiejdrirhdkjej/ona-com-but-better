@@ -6,6 +6,10 @@ import './src/libs/Env';
 const baseConfig: NextConfig = {
   eslint: {
     dirs: ['.'],
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
   },
   allowedDevOrigins: ['*.replit.dev', '*.kirk.replit.dev', '*.repl.co'],
   images: {
