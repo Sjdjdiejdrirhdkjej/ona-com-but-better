@@ -1393,7 +1393,7 @@ export default function AppPage() {
               return filtered.map(c => (
                 <div
                   key={c.id}
-                  className={`group relative flex w-full items-start rounded-xl px-3 py-3 text-left transition-colors ${
+                  className={`group flex w-full items-stretch overflow-hidden rounded-xl text-left transition-colors ${
                     c.id === activeId
                       ? 'bg-black/8 dark:bg-white/10 text-gray-900 dark:text-gray-100'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/8 dark:active:bg-white/10'
@@ -1401,10 +1401,10 @@ export default function AppPage() {
                 >
                   <button
                     onClick={() => { setActiveId(c.id); closeSidebarOnMobile(); }}
-                    className="min-w-0 flex-1 text-left"
+                    className="min-w-0 flex-1 px-3 py-3 text-left"
                     aria-label={`Switch to task: ${c.title}`}
                   >
-                    <div className="flex items-center gap-1.5 pr-6">
+                    <div className="flex items-center gap-1.5">
                       <p className="truncate text-sm font-medium leading-tight">{c.title}</p>
                       {c.activeJobId && (
                         <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="shrink-0 text-indigo-400" style={{ animation: 'ona-spin 1s linear infinite' }}>
@@ -1417,10 +1417,11 @@ export default function AppPage() {
                   </button>
                   <button
                     onClick={e => deleteConversation(c.id, e)}
-                    className="delete-btn absolute right-2 top-3 shrink-0 rounded p-1 text-gray-400 dark:text-gray-500 transition-colors hover:text-gray-700 dark:hover:text-gray-300"
+                    className="delete-btn flex w-11 shrink-0 items-center justify-center border-l border-black/5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-inset dark:border-white/8 dark:text-gray-500 dark:hover:bg-red-500/10 dark:hover:text-red-300"
                     aria-label="Delete task"
+                    title="Delete task"
                   >
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
                       <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                   </button>
