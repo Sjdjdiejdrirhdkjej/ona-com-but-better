@@ -13,7 +13,7 @@
  */
 
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
-const LIBRARIAN_MODEL = process.env.FIREWORKS_MODEL ?? 'accounts/fireworks/models/kimi-k2p5';
+const LIBRARIAN_MODEL = process.env.FIREWORKS_MODEL ?? 'accounts/fireworks/routers/kimi-k2p5-turbo';
 const LIBRARIAN_MAX_ITERATIONS = 6;
 
 const LIBRARIAN_SYSTEM_PROMPT = `You are the Librarian, a specialist read-only research subagent inside the Ona engineering agent system.

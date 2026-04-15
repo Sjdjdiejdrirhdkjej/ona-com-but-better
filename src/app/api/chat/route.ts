@@ -10,7 +10,7 @@ export const runtime = 'nodejs';
 
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
 const DEFAULT_FIREWORKS_MODELS = [
-  'accounts/fireworks/models/kimi-k2p5',
+  'accounts/fireworks/routers/kimi-k2p5-turbo',
   'accounts/fireworks/models/kimi-k2-instruct-0905',
   'accounts/fireworks/models/llama4-maverick-instruct-basic',
 ];
