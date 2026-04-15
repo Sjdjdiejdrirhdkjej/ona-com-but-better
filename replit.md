@@ -5,7 +5,7 @@ An Ona.com clone — a platform for AI background software engineering agents. T
 
 ## Architecture
 - **Framework**: Next.js 15 with App Router and Turbopack
-- **Database**: PGLite (embedded PostgreSQL, no Docker needed) — runs as a local socket server (`pglite-server --db=local.db`)
+- **Database**: PostgreSQL via `DATABASE_URL` using Drizzle ORM; database access stays server-side in API routes/libs
 - **ORM**: Drizzle ORM
 - **Styling**: Tailwind CSS v4
 - **i18n**: next-intl with `[locale]` routing, locales en/fr, `as-needed` prefix (so `/app` works without prefix)
@@ -14,7 +14,7 @@ An Ona.com clone — a platform for AI background software engineering agents. T
 
 ## Replit Configuration
 - **Dev server**: port 5000, bound to `0.0.0.0` (required for Replit preview)
-- **Workflow**: "Start application" runs `npm run dev` (starts PGLite file server + Next.js dev server in parallel)
+- **Workflow**: "Start application" runs `npm run dev` (Next.js dev server on port 5000)
 - **Secrets**: `FIREWORKS_API_KEY` (Fireworks AI)
 
 ## Key Files
@@ -41,7 +41,7 @@ An Ona.com clone — a platform for AI background software engineering agents. T
 
 ## Development
 ```bash
-npm run dev          # Start dev server + PGLite
+npm run dev          # Start Next.js dev server on port 5000
 npm run build        # Build for production
 npm run db:generate  # Generate Drizzle migrations
 npm run db:studio    # Open Drizzle Studio
