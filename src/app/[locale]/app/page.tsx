@@ -27,6 +27,11 @@ type Conversation = {
   createdAt: number;
 };
 
+type ToolStep = {
+  label: string;
+  status: 'running' | 'done' | 'error';
+};
+
 type GitHubStatus = {
   configured: boolean;
   connected: boolean;
@@ -277,19 +282,40 @@ function MessageBubble({ msg }: { msg: Message }) {
   );
 }
 
-function TypingIndicator({ tools }: { tools?: string[] }) {
-  const label = tools && tools.length > 0
-    ? tools.slice(0, 2).join(' · ') + (tools.length > 2 ? ` +${tools.length - 2}` : '')
-    : null;
-
+function ToolStepIcon({ status }: { status: ToolStep['status'] }) {
+  if (status === 'done') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 text-green-500">
+        <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.1" />
+        <path d="M3.5 6l1.8 1.8 3.2-3.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 text-red-400">
+        <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.1" />
+        <path d="M4 4l4 4M8 4l-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      </svg>
+    );
+  }
   return (
-    <div className="flex justify-start">
-      <OnaAvatar />
-      <div
-        className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-gray-200 dark:border-gray-700 px-4 py-3"
-        style={{ backgroundColor: 'var(--bg-2)' }}
-      >
-        <span className="flex items-center gap-1">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 text-indigo-400" style={{ animation: 'ona-spin 1s linear infinite' }}>
+      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3" strokeOpacity="0.25" />
+      <path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TypingIndicator({ steps }: { steps: ToolStep[] }) {
+  if (steps.length === 0) {
+    return (
+      <div className="flex justify-start">
+        <OnaAvatar />
+        <div
+          className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm border border-gray-200 dark:border-gray-700 px-4 py-3"
+          style={{ backgroundColor: 'var(--bg-2)' }}
+        >
           {[0, 1, 2].map(i => (
             <span
               key={i}
@@ -297,10 +323,35 @@ function TypingIndicator({ tools }: { tools?: string[] }) {
               style={{ animation: `ona-pulse 1s ease-in-out ${i * 0.2}s infinite` }}
             />
           ))}
-        </span>
-        {label && (
-          <span className="text-xs text-gray-500 dark:text-gray-400">{label}…</span>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-start">
+      <OnaAvatar />
+      <div
+        className="rounded-2xl rounded-tl-sm border border-gray-200 dark:border-gray-700 px-4 py-3 space-y-1.5"
+        style={{ backgroundColor: 'var(--bg-2)' }}
+      >
+        {steps.map((step, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <ToolStepIcon status={step.status} />
+            <span
+              className={`text-xs ${
+                step.status === 'done'
+                  ? 'text-gray-400 dark:text-gray-500'
+                  : step.status === 'error'
+                    ? 'text-red-400'
+                    : 'text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              {step.label}
+              {step.status === 'running' ? '…' : ''}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -322,7 +373,7 @@ export default function AppPage() {
   const [search, setSearch] = useState('');
   const [githubStatus, setGithubStatus] = useState<GitHubStatus | null>(null);
   const [deviceAuth, setDeviceAuth] = useState<DeviceAuthState | null>(null);
-  const [activeTools, setActiveTools] = useState<string[]>([]);
+  const [toolSteps, setToolSteps] = useState<ToolStep[]>([]);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -638,17 +689,33 @@ export default function AppPage() {
               delta?: string;
               type?: string;
               tools?: string[];
+              tool?: string;
+              error?: boolean;
               message?: string;
             };
 
             if (json.type === 'tool_call' && json.tools?.length) {
-              setActiveTools(json.tools);
+              setToolSteps(json.tools.map((label: string) => ({ label, status: 'running' as const })));
+            } else if (json.type === 'tool_start' && json.tool) {
+              setToolSteps(prev =>
+                prev.some(s => s.label === json.tool)
+                  ? prev.map(s => s.label === json.tool ? { ...s, status: 'running' as const } : s)
+                  : [...prev, { label: json.tool as string, status: 'running' as const }],
+              );
+            } else if (json.type === 'tool_complete' && json.tool) {
+              setToolSteps(prev =>
+                prev.map(s =>
+                  s.label === json.tool
+                    ? { ...s, status: (json.error ? 'error' : 'done') as ToolStep['status'] }
+                    : s,
+                ),
+              );
             } else if (json.type === 'tool_done') {
-              setActiveTools([]);
+              setToolSteps([]);
             } else if (json.type === 'error' && json.message) {
               throw new Error(json.message);
             } else if (json.delta) {
-              setActiveTools([]);
+              setToolSteps([]);
               const delta = json.delta;
               assistantText += delta;
               setConversations(prev =>
@@ -689,7 +756,7 @@ export default function AppPage() {
       );
     } finally {
       setLoading(false);
-      setActiveTools([]);
+      setToolSteps([]);
     }
 
     // Save assistant message
@@ -979,7 +1046,7 @@ export default function AppPage() {
                     {messages.map(msg => (
                       <MessageBubble key={msg.id} msg={msg} />
                     ))}
-                    {loading && messages.at(-1)?.role !== 'assistant' && <TypingIndicator tools={activeTools} />}
+                    {loading && messages.at(-1)?.role !== 'assistant' && <TypingIndicator steps={toolSteps} />}
                     <div ref={bottomRef} />
                   </div>
                 )}

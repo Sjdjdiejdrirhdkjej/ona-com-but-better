@@ -134,10 +134,20 @@ type FireworksMessage = {
   tool_calls?: ToolCall[];
 };
 
+type FireworksDelta = {
+  content?: string | null;
+  tool_calls?: Array<{
+    index: number;
+    id?: string;
+    type?: 'function';
+    function?: { name?: string; arguments?: string };
+  }>;
+};
+
 type FireworksResponse = {
   choices?: Array<{
     message?: FireworksMessage;
-    delta?: { content?: string };
+    delta?: FireworksDelta;
     finish_reason?: string;
   }>;
   error?: { message?: string };
@@ -174,7 +184,6 @@ async function callFireworks(body: Record<string, unknown>, retries = 3): Promis
     if (res.ok) return res;
 
     if (res.status === 429 || res.status >= 500) {
-      const text = await res.text();
       lastError = new Error(`The AI model is temporarily busy (${res.status}). Please try again in a moment.`);
       if (res.status === 429 || res.status === 503) {
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
@@ -192,6 +201,61 @@ async function callFireworks(body: Record<string, unknown>, retries = 3): Promis
   }
 
   throw lastError ?? new Error('Request failed after multiple attempts. Please try again.');
+}
+
+async function streamFireworksCall(
+  body: Record<string, unknown>,
+  onDelta: (delta: string) => void,
+): Promise<{ content: string; toolCalls: ToolCall[] }> {
+  const res = await callFireworks({ ...body, stream: true });
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  const toolCallsMap = new Map<number, { id: string; type: 'function'; function: { name: string; arguments: string } }>();
+
+  try {
+    outer: while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') break outer;
+        try {
+          const json = JSON.parse(raw) as FireworksResponse;
+          const delta = json.choices?.[0]?.delta as FireworksDelta | undefined;
+          if (!delta) continue;
+
+          if (delta.content) {
+            content += delta.content;
+            onDelta(delta.content);
+          }
+
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!toolCallsMap.has(idx)) {
+                toolCallsMap.set(idx, { id: '', type: 'function', function: { name: '', arguments: '' } });
+              }
+              const entry = toolCallsMap.get(idx)!;
+              if (tc.id) entry.id = tc.id;
+              if (tc.function?.name) entry.function.name += tc.function.name;
+              if (tc.function?.arguments) entry.function.arguments += tc.function.arguments;
+            }
+          }
+        } catch {}
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return { content, toolCalls: [...toolCallsMap.values()] };
 }
 
 function parseToolArgs(value: string): Record<string, unknown> {
@@ -247,70 +311,49 @@ export async function POST(req: NextRequest) {
           content: 'GitHub is not connected for this user. If they ask for any repository action, tell them to connect their GitHub account using the "Connect GitHub" button first. You can still help with general coding questions and planning.',
         });
 
-        const fireworksRes = await callFireworks({
-          messages: conversation,
-          stream: true,
-          max_tokens: 1600,
-          temperature: 0.45,
-        });
-
-        const decoder = new TextDecoder();
-        const reader = fireworksRes.body!.getReader();
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            for (const line of chunk.split('\n')) {
-              if (!line.startsWith('data: ')) continue;
-              const data = line.slice(6).trim();
-              if (data === '[DONE]') break;
-              try {
-                const json = JSON.parse(data) as FireworksResponse;
-                const delta = json.choices?.[0]?.delta?.content;
-                if (delta) emit({ delta });
-              } catch {}
-            }
-          }
-        } finally {
-          reader.releaseLock();
-        }
+        await streamFireworksCall(
+          {
+            messages: conversation,
+            max_tokens: 1600,
+            temperature: 0.45,
+          },
+          (delta) => emit({ delta }),
+        );
         return;
       }
 
       const MAX_TOOL_ITERATIONS = 10;
 
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-        const res = await callFireworks({
-          messages: conversation,
-          tools: [...githubToolDefinitions, ...daytonaToolDefinitions],
-          tool_choice: 'auto',
-          stream: false,
-          max_tokens: 1400,
-          temperature: 0.3,
-        });
+        const { content, toolCalls } = await streamFireworksCall(
+          {
+            messages: conversation,
+            tools: [...githubToolDefinitions, ...daytonaToolDefinitions],
+            tool_choice: 'auto',
+            max_tokens: 1400,
+            temperature: 0.3,
+          },
+          (delta) => emit({ delta }),
+        );
 
-        const data = await res.json() as FireworksResponse;
-        const message = data.choices?.[0]?.message;
-
-        if (!message?.tool_calls?.length) {
-          const text = message?.content ?? 'I could not produce a response.';
-          const chunks = text.match(/[\s\S]{1,80}/g) ?? [''];
-          for (const chunk of chunks) emit({ delta: chunk });
+        if (!toolCalls.length) {
+          if (!content) emit({ delta: 'I could not produce a response.' });
           break;
         }
 
-        const labels = message.tool_calls.map(t => toolLabel(t.function.name));
+        const labels = toolCalls.map(t => toolLabel(t.function.name));
         emit({ type: 'tool_call', tools: labels });
 
         conversation.push({
           role: 'assistant',
-          content: message.content ?? '',
-          tool_calls: message.tool_calls,
+          content: content ?? '',
+          tool_calls: toolCalls,
         });
 
         await Promise.all(
-          message.tool_calls.map(async (toolCall) => {
+          toolCalls.map(async (toolCall) => {
+            const label = toolLabel(toolCall.function.name);
+            emit({ type: 'tool_start', tool: label });
             try {
               const toolName = toolCall.function.name;
               const toolArgs = parseToolArgs(toolCall.function.arguments);
@@ -322,12 +365,14 @@ export async function POST(req: NextRequest) {
                 tool_call_id: toolCall.id,
                 content: JSON.stringify(result).slice(0, 24000),
               });
+              emit({ type: 'tool_complete', tool: label });
             } catch (error) {
               conversation.push({
                 role: 'tool',
                 tool_call_id: toolCall.id,
                 content: JSON.stringify({ error: (error as Error).message }),
               });
+              emit({ type: 'tool_complete', tool: label, error: true });
             }
           }),
         );

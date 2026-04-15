@@ -58,3 +58,13 @@ body {
 .dark .hljs-name { color: #d2a8ff !important; }
 .dark .hljs-built_in,
 .dark .hljs-type { color: #ffa657 !important; }
+
+@keyframes ona-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ona-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
