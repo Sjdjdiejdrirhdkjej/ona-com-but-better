@@ -560,6 +560,7 @@ export default function AppPage() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const messagesContentRef = useRef<HTMLDivElement>(null);
   const scrollRAFRef = useRef<number | null>(null);
   const userScrolledUpRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -954,26 +955,40 @@ export default function AppPage() {
   const activeConversation = conversations.find(c => c.id === activeId);
   const messages = activeConversation?.messages ?? [];
 
-  // Coalesced scroll: cancel any pending RAF and queue a new one.
-  // Uses direct scrollTop assignment (no smooth animation) so rapid streaming
-  // updates don't stack conflicting CSS scroll animations.
+  // Scroll to bottom using double-RAF so both React's DOM commit and the
+  // browser's subsequent layout/paint pass have completed before we read
+  // scrollHeight. Single-RAF can fire before the browser reflows new content
+  // (e.g. syntax-highlighted code blocks, tool-step expansions).
   const scrollToBottom = useCallback((force = false) => {
     if (!force && userScrolledUpRef.current) return;
     if (scrollRAFRef.current !== null) cancelAnimationFrame(scrollRAFRef.current);
     scrollRAFRef.current = requestAnimationFrame(() => {
-      const el = scrollContainerRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
-      scrollRAFRef.current = null;
+      scrollRAFRef.current = requestAnimationFrame(() => {
+        const el = scrollContainerRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+        scrollRAFRef.current = null;
+      });
     });
   }, []);
 
-  // Auto-scroll whenever messages or loading state change.
+  // ResizeObserver on the messages content div: fires after every layout
+  // change (new messages, tool blocks, markdown rendering, code highlighting)
+  // so we never miss a content height change that should trigger a scroll.
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading, scrollToBottom]);
+    const content = messagesContentRef.current;
+    if (!content) return;
+    const ro = new ResizeObserver(() => {
+      if (!userScrolledUpRef.current) {
+        const el = scrollContainerRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      }
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  });
 
   // Detect when the user manually scrolls up so we stop auto-scrolling.
-  // Reset automatically when content brings them back to the bottom.
+  // Reset automatically when the user scrolls back to the bottom.
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -1876,7 +1891,7 @@ export default function AppPage() {
                   </div>
                 )
               : (
-                  <div className="mx-auto max-w-2xl space-y-5">
+                  <div ref={messagesContentRef} className="mx-auto max-w-2xl space-y-5">
                     {messages
                       .filter(m => m.role === 'tool_steps' || m.role === 'user' || !!m.content)
                       .map(msg => (
