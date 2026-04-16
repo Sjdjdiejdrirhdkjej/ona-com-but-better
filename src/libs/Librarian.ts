@@ -447,6 +447,7 @@ type FireworksNonStreamResponse = {
   choices?: Array<{
     message?: {
       content?: string | null;
+      reasoning_content?: string | null;
       tool_calls?: Array<{
         id?: string;
         type?: string;
@@ -475,10 +476,11 @@ async function librarianCall(messages: LibrarianMessage[]): Promise<{ content: s
       messages,
       tools: INTERNAL_TOOLS,
       tool_choice: 'auto',
-      max_tokens: 16384,
+      max_tokens: 32768,
       temperature: 0.1,
+      reasoning_effort: 'high',
     }),
-    signal: AbortSignal.timeout(90000),
+    signal: AbortSignal.timeout(180000),
   });
 
   if (!res.ok) {
@@ -490,7 +492,11 @@ async function librarianCall(messages: LibrarianMessage[]): Promise<{ content: s
   if (json.error?.message) throw new Error(`Librarian AI error: ${json.error.message}`);
 
   const msg = json.choices?.[0]?.message;
-  const content = msg?.content ?? '';
+  const rawContent = msg?.content ?? '';
+  const reasoningContent = msg?.reasoning_content ?? '';
+  const content = reasoningContent
+    ? `<think>${reasoningContent}</think>${rawContent}`
+    : rawContent;
   const toolCalls: LibrarianToolCall[] = (msg?.tool_calls ?? []).map(tc => ({
     id: tc.id ?? crypto.randomUUID(),
     type: 'function',

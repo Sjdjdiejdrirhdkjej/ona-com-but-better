@@ -644,6 +644,7 @@ type FireworksNonStreamResponse = {
   choices?: Array<{
     message?: {
       content?: string | null;
+      reasoning_content?: string | null;
       tool_calls?: Array<{
         id?: string;
         type?: string;
@@ -672,10 +673,11 @@ async function browserUseCall(
       messages,
       tools: INTERNAL_TOOLS,
       tool_choice: 'auto',
-      max_tokens: 8192,
+      max_tokens: 16384,
       temperature: 0.1,
+      reasoning_effort: 'high',
     }),
-    signal: AbortSignal.timeout(90000),
+    signal: AbortSignal.timeout(180000),
   });
 
   if (!res.ok) {
@@ -687,7 +689,11 @@ async function browserUseCall(
   if (json.error?.message) throw new Error(`Browser Use AI error: ${json.error.message}`);
 
   const msg = json.choices?.[0]?.message;
-  const content = msg?.content ?? '';
+  const rawContent = msg?.content ?? '';
+  const reasoningContent = msg?.reasoning_content ?? '';
+  const content = reasoningContent
+    ? `<think>${reasoningContent}</think>${rawContent}`
+    : rawContent;
   const toolCalls: BrowserUseToolCall[] = (msg?.tool_calls ?? []).map(tc => ({
     id: tc.id ?? crypto.randomUUID(),
     type: 'function',

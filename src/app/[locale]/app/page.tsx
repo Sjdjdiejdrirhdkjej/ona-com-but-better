@@ -24,6 +24,7 @@ type ToolStep = {
   status: 'running' | 'done' | 'error';
   subSteps?: SubStep[];
   librarianReport?: string;
+  browserReport?: string;
 };
 
 type Message = {
@@ -396,11 +397,13 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
         {steps.map((step, i) => {
           const hasSubSteps = !!(step.subSteps && step.subSteps.length > 0);
           const hasReport = !!step.librarianReport;
+          const hasBrowserReport = !!step.browserReport;
           const isOpen = expandedLabels.has(step.label) || (step.status === 'running' && hasSubSteps);
           const isReportOpen = expandedReports.has(step.label);
+          const isBrowserReportOpen = expandedReports.has(`${step.label}::browser`);
           return (
             <div key={i}>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <ToolStepIcon status={step.status} />
                 <span
                   className={`text-xs ${
@@ -436,6 +439,20 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
                     {isReportOpen ? 'Hide report' : 'View report'}
                   </button>
                 )}
+                {hasBrowserReport && (
+                  <button
+                    onClick={() => toggleReport(`${step.label}::browser`)}
+                    className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-sky-400 hover:text-sky-600 dark:hover:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/40 transition-colors"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <rect x="1" y="1.5" width="8" height="7" rx="1.2" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M1 3.5h8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+                      <circle cx="2.5" cy="2.5" r="0.5" fill="currentColor" />
+                      <circle cx="4" cy="2.5" r="0.5" fill="currentColor" />
+                    </svg>
+                    {isBrowserReportOpen ? 'Hide trace' : 'Browser trace'}
+                  </button>
+                )}
               </div>
               {hasSubSteps && isOpen && (
                 <div className="mt-1.5 ml-4 pl-3 space-y-1 border-l border-gray-200 dark:border-gray-700">
@@ -461,6 +478,11 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
               {hasReport && isReportOpen && (
                 <div className="mt-2 ml-4 rounded-xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
                   <AssistantMarkdown text={step.librarianReport!} />
+                </div>
+              )}
+              {hasBrowserReport && isBrowserReportOpen && (
+                <div className="mt-2 ml-4 rounded-xl border border-sky-100 dark:border-sky-900/60 bg-sky-50/60 dark:bg-sky-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
+                  <AssistantMarkdown text={step.browserReport!} />
                 </div>
               )}
             </div>
@@ -576,7 +598,7 @@ export default function AppPage() {
 
           loaded.forEach(c => {
             if (c.activeJobId) {
-              scheduleBackgroundPoll(c.id, c.activeJobId, 0);
+              scheduleBackgroundPoll(c.id, c.activeJobId, 0, true);
             }
           });
         } else {
@@ -596,15 +618,16 @@ export default function AppPage() {
     setSandboxFiles([]);
   }, [activeId]);
 
-  function scheduleBackgroundPoll(convId: string, jobId: string, cursor: number) {
+  function scheduleBackgroundPoll(convId: string, jobId: string, cursor: number, rebuild = false) {
     const existing = bgPollTimersRef.current.get(convId);
     if (existing) clearTimeout(existing);
 
-    const timer = setTimeout(() => pollBackgroundJob(convId, jobId, cursor), 3000);
+    const delay = cursor === 0 && rebuild ? 0 : 3000;
+    const timer = setTimeout(() => pollBackgroundJob(convId, jobId, cursor, rebuild), delay);
     bgPollTimersRef.current.set(convId, timer);
   }
 
-  async function pollBackgroundJob(convId: string, jobId: string, cursor: number) {
+  async function pollBackgroundJob(convId: string, jobId: string, cursor: number, rebuild = false) {
     try {
       const res = await fetch(`/api/jobs/${jobId}/events?after=${cursor}`);
       if (!res.ok) {
@@ -624,7 +647,32 @@ export default function AppPage() {
           const conv = prev.find(c => c.id === convId);
           if (!conv) return prev;
 
-          let messages = [...conv.messages];
+          // Rebuild mode: strip all non-user messages and start fresh from events.
+          // Used on page-refresh reconnect to avoid duplicating DB-loaded messages.
+          let messages: Message[] = rebuild
+            ? [
+                ...conv.messages.filter(m => m.role === 'user'),
+                { id: crypto.randomUUID(), role: 'assistant', content: '' },
+              ]
+            : [...conv.messages];
+
+          function applyStepUpdate(
+            msgs: Message[],
+            predicate: (s: ToolStep) => boolean,
+            updater: (s: ToolStep) => ToolStep,
+          ): Message[] {
+            let found = false;
+            const updated = msgs.map(m => {
+              if (m.role !== 'tool_steps' || found) return m;
+              const steps = m.content as ToolStep[];
+              if (steps.some(predicate)) {
+                found = true;
+                return { ...m, content: steps.map(s => predicate(s) ? updater(s) : s) };
+              }
+              return m;
+            });
+            return updated;
+          }
 
           for (const ev of data.events) {
             if (ev.type === 'tool_call') {
@@ -636,19 +684,11 @@ export default function AppPage() {
               messages.push({ id: nextAssistantMsgId, role: 'assistant', content: '' });
             } else if (ev.type === 'tool_start') {
               const tool = ev.data.tool as string;
-              messages = messages.map(m =>
-                m.role === 'tool_steps'
-                  ? { ...m, content: (m.content as ToolStep[]).map(s => s.label === tool ? { ...s, status: 'running' as const } : s) }
-                  : m,
-              );
+              messages = applyStepUpdate(messages, s => s.label === tool, s => ({ ...s, status: 'running' as const }));
             } else if (ev.type === 'tool_complete') {
               const tool = ev.data.tool as string;
               const hasError = !!ev.data.error;
-              messages = messages.map(m =>
-                m.role === 'tool_steps'
-                  ? { ...m, content: (m.content as ToolStep[]).map(s => s.label === tool ? { ...s, status: (hasError ? 'error' : 'done') as ToolStep['status'] } : s) }
-                  : m,
-              );
+              messages = applyStepUpdate(messages, s => s.label === tool, s => ({ ...s, status: (hasError ? 'error' : 'done') as ToolStep['status'] }));
             } else if (ev.type === 'tool_done') {
               messages = messages.map(m =>
                 m.role === 'tool_steps'
@@ -661,54 +701,55 @@ export default function AppPage() {
             } else if (ev.type === 'librarian_step_start') {
               const parentLabel = ev.data.parentLabel as string;
               const step = ev.data.step as string;
-              messages = messages.map(m =>
-                m.role === 'tool_steps'
-                  ? {
-                      ...m,
-                      content: (m.content as ToolStep[]).map(s =>
-                        s.label === parentLabel
-                          ? { ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }
-                          : s,
-                      ),
-                    }
-                  : m,
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({ ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }),
               );
             } else if (ev.type === 'librarian_step_complete') {
               const parentLabel = ev.data.parentLabel as string;
               const step = ev.data.step as string;
               const hasError = !!ev.data.error;
-              messages = messages.map(m =>
-                m.role === 'tool_steps'
-                  ? {
-                      ...m,
-                      content: (m.content as ToolStep[]).map(s =>
-                        s.label === parentLabel
-                          ? {
-                              ...s,
-                              subSteps: (s.subSteps ?? []).map(sub =>
-                                sub.label === step
-                                  ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] }
-                                  : sub,
-                              ),
-                            }
-                          : s,
-                      ),
-                    }
-                  : m,
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({
+                  ...s,
+                  subSteps: (s.subSteps ?? []).map(sub =>
+                    sub.label === step ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] } : sub,
+                  ),
+                }),
               );
             } else if (ev.type === 'librarian_report') {
               const parentLabel = ev.data.parentLabel as string;
               const report = ev.data.report as string;
-              messages = messages.map(m =>
-                m.role === 'tool_steps'
-                  ? {
-                      ...m,
-                      content: (m.content as ToolStep[]).map(s =>
-                        s.label === parentLabel ? { ...s, librarianReport: report } : s,
-                      ),
-                    }
-                  : m,
+              messages = applyStepUpdate(messages, s => s.label === parentLabel, s => ({ ...s, librarianReport: report }));
+            } else if (ev.type === 'browser_use_step_start') {
+              const parentLabel = ev.data.parentLabel as string;
+              const step = ev.data.step as string;
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({ ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }),
               );
+            } else if (ev.type === 'browser_use_step_complete') {
+              const parentLabel = ev.data.parentLabel as string;
+              const step = ev.data.step as string;
+              const hasError = !!ev.data.error;
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({
+                  ...s,
+                  subSteps: (s.subSteps ?? []).map(sub =>
+                    sub.label === step ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] } : sub,
+                  ),
+                }),
+              );
+            } else if (ev.type === 'browser_use_report') {
+              const parentLabel = ev.data.parentLabel as string;
+              const report = ev.data.report as string;
+              messages = applyStepUpdate(messages, s => s.label === parentLabel, s => ({ ...s, browserReport: report }));
             } else if (ev.type === 'content') {
               const text = ev.data.text as string ?? '';
               const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
@@ -730,21 +771,21 @@ export default function AppPage() {
         });
 
         if (!data.done) {
-          scheduleBackgroundPoll(convId, jobId, lastId);
+          scheduleBackgroundPoll(convId, jobId, lastId, false);
         } else {
           stopBackgroundPoll(convId);
           refreshConversationMessages(convId);
         }
       } else {
         if (!data.done) {
-          scheduleBackgroundPoll(convId, jobId, cursor);
+          scheduleBackgroundPoll(convId, jobId, cursor, false);
         } else {
           stopBackgroundPoll(convId);
           refreshConversationMessages(convId);
         }
       }
     } catch {
-      scheduleBackgroundPoll(convId, jobId, cursor);
+      scheduleBackgroundPoll(convId, jobId, cursor, false);
     }
   }
 
@@ -1304,6 +1345,71 @@ export default function AppPage() {
                           ...m,
                           content: (m.content as ToolStep[]).map(s =>
                             s.label === parentLabel ? { ...s, librarianReport: report } : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'browser_use_step_start' && json.parentLabel && json.step) {
+              const { parentLabel, step } = json as { parentLabel: string; step: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel
+                              ? { ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'browser_use_step_complete' && json.parentLabel && json.step) {
+              const { parentLabel, step, error: hasError } = json as { parentLabel: string; step: string; error?: boolean };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel
+                              ? {
+                                  ...s,
+                                  subSteps: (s.subSteps ?? []).map(sub =>
+                                    sub.label === step
+                                      ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] }
+                                      : sub,
+                                  ),
+                                }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'browser_use_report' && json.parentLabel && json.report) {
+              const { parentLabel, report } = json as { parentLabel: string; report: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel ? { ...s, browserReport: report } : s,
                           ),
                         }
                       : m,
