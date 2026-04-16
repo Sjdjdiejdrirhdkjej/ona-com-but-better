@@ -3,6 +3,7 @@ import { hasLocale, NextIntlClientProvider } from 'next-intl';
 import { setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
+import { ThemeInitializer } from '@/components/ThemeInitializer';
 import { routing } from '@/libs/I18nRouting';
 import '@/styles/global.css';
 
@@ -49,14 +50,8 @@ export default async function RootLayout(props: {
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`,
-          }}
-        />
-      </head>
       <body suppressHydrationWarning>
+        <ThemeInitializer />
         <NextIntlClientProvider>{props.children}</NextIntlClientProvider>
       </body>
     </html>

@@ -16,6 +16,7 @@ An open-source platform for AI background software engineering agents. The landi
 - **Dev server**: port 5000, bound to `0.0.0.0` (required for Replit preview)
 - **Workflow**: "Start application" runs `npm run dev` (Next.js dev server on port 5000)
 - **Preview compatibility**: `next.config.ts` allows Replit dev origins including the current `REPLIT_DEV_DOMAIN` so proxied `_next` assets load correctly.
+- **Hydration compatibility**: theme preference is applied after client mount via `src/components/ThemeInitializer.tsx`, avoiding server/client HTML attribute mismatches in the Replit preview.
 - **Secrets**: `FIREWORKS_API_KEY` (Fireworks AI)
 
 ## Vercel Build Configuration
@@ -30,6 +31,8 @@ An open-source platform for AI background software engineering agents. The landi
 - `src/app/api/chat/route.ts` — Server-side streaming API route calling Fireworks AI
 - `src/app/[locale]/app/layout.tsx` — Minimal layout for /app
 - `src/app/[locale]/(marketing)/layout.tsx` — Marketing nav with NavPromptBox + Get Started
+- `src/app/[locale]/layout.tsx` — Root locale layout and client-side theme initializer
+- `src/components/ThemeInitializer.tsx` — Applies saved/system dark-mode preference after hydration
 - `src/components/MobileMenu.tsx` — Mobile hamburger with prompt box
 - `src/components/NavPromptBox.tsx` — Desktop navbar prompt input
 - `src/libs/Env.ts` — Environment variable validation

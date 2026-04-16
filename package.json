@@ -34,7 +34,7 @@
     "@daytonaio/sdk": "^0.165.0",
     "@electric-sql/pglite": "^0.4.4",
     "@hookform/resolvers": "^5.2.2",
-    "@next/swc-linux-x64-gnu": "^16.2.3",
+    "@next/swc-linux-x64-gnu": "^16.2.4",
     "@t3-oss/env-nextjs": "^0.13.11",
     "@types/react-dom": "^19.2.3",
     "drizzle-orm": "^0.45.2",
