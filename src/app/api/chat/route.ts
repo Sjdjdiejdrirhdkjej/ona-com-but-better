@@ -42,7 +42,7 @@ const FALLBACK_MODELS = [
 ].filter((model): model is string => Boolean(model?.trim()))
   .map(model => model.trim())
   .filter((model, index, models) => models.indexOf(model) === index);
-const MAX_AGENT_ITERATIONS = 60;
+const MAX_AGENT_ITERATIONS = Infinity;
 
 const CURRENT_DATE = new Date().toISOString().slice(0, 10);
 

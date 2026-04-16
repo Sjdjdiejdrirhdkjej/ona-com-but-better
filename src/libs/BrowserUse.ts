@@ -26,7 +26,7 @@ import type { Browser, Page } from '@playwright/test';
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
 const BROWSER_USE_MODEL =
   process.env.FIREWORKS_BROWSER_MODEL ?? 'accounts/fireworks/models/kimi-k2-instruct-0905';
-const BROWSER_USE_MAX_ITERATIONS = 20;
+const BROWSER_USE_MAX_ITERATIONS = Infinity;
 const FIRECRAWL_BASE_URL = process.env.FIRECRAWL_API_URL ?? 'https://api.firecrawl.dev';
 const FIRECRAWL_SESSION_TTL = Number(process.env.FIRECRAWL_BROWSER_TTL ?? '300');
 

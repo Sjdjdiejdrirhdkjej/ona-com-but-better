@@ -14,7 +14,7 @@
 
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
 const LIBRARIAN_MODEL = process.env.FIREWORKS_LIBRARIAN_MODEL ?? 'accounts/fireworks/models/kimi-k2-thinking';
-const LIBRARIAN_MAX_ITERATIONS = 15;
+const LIBRARIAN_MAX_ITERATIONS = Infinity;
 
 const CURRENT_YEAR = new Date().getFullYear();
 
