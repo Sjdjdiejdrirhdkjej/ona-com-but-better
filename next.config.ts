@@ -9,7 +9,13 @@ const baseConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  allowedDevOrigins: ['*.replit.dev', '*.kirk.replit.dev', '*.repl.co'],
+  allowedDevOrigins: [
+    '*.replit.dev',
+    '*.kirk.replit.dev',
+    '*.picard.replit.dev',
+    '*.repl.co',
+    ...(process.env.REPLIT_DEV_DOMAIN ? [process.env.REPLIT_DEV_DOMAIN] : []),
+  ],
   images: {
     remotePatterns: [
       {

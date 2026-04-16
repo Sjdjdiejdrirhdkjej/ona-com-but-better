@@ -64,7 +64,7 @@
     "@faker-js/faker": "^10.4.0",
     "@lingual/i18n-check": "^0.9.3",
     "@next/bundle-analyzer": "^15.5.15",
-    "@next/eslint-plugin-next": "^15.3.3",
+    "@next/eslint-plugin-next": "^15.5.15",
     "@playwright/test": "^1.59.1",
     "@storybook/addon-a11y": "^9.1.20",
     "@storybook/addon-docs": "^9.1.20",
@@ -100,7 +100,7 @@
     "storybook": "^9.1.20",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "unlighthouse": "^0.17.8",
+    "unlighthouse": "^0.17.9",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4",
     "vitest-browser-react": "^1.0.1"

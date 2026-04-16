@@ -56,7 +56,7 @@ export default async function RootLayout(props: {
           }}
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <NextIntlClientProvider>{props.children}</NextIntlClientProvider>
       </body>
     </html>

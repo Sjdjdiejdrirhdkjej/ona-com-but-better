@@ -15,6 +15,7 @@ An Ona.com clone — a platform for AI background software engineering agents. T
 ## Replit Configuration
 - **Dev server**: port 5000, bound to `0.0.0.0` (required for Replit preview)
 - **Workflow**: "Start application" runs `npm run dev` (Next.js dev server on port 5000)
+- **Preview compatibility**: `next.config.ts` allows Replit dev origins including the current `REPLIT_DEV_DOMAIN` so proxied `_next` assets load correctly.
 - **Secrets**: `FIREWORKS_API_KEY` (Fireworks AI)
 
 ## Vercel Build Configuration
