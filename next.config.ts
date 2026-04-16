@@ -27,9 +27,6 @@ const baseConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   serverExternalPackages: ['@electric-sql/pglite'],
-  experimental: {
-    forceSwcTransforms: false,
-  },
 };
 
 const nextIntlConfig = createNextIntlPlugin('./src/libs/I18n.ts')(baseConfig);

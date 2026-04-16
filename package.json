@@ -5,8 +5,8 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev:next": "next dev -p 5000 -H 0.0.0.0",
-    "dev": "next dev -p 5000 -H 0.0.0.0",
+    "dev:next": "next dev --turbo -p 5000 -H 0.0.0.0",
+    "dev": "next dev --turbo -p 5000 -H 0.0.0.0",
     "build:next": "next build",
     "build": "next build",
     "start": "next start -p 5000 -H 0.0.0.0",
@@ -34,7 +34,6 @@
     "@daytonaio/sdk": "^0.165.0",
     "@electric-sql/pglite": "^0.4.4",
     "@hookform/resolvers": "^5.2.2",
-    "@next/swc-linux-x64-gnu": "^16.2.4",
     "@t3-oss/env-nextjs": "^0.13.11",
     "@types/react-dom": "^19.2.3",
     "drizzle-orm": "^0.45.2",
@@ -119,5 +118,8 @@
       "@semantic-release/release-notes-generator",
       "@semantic-release/github"
     ]
+  },
+  "optionalDependencies": {
+    "@next/swc-linux-x64-gnu": "^15.5.15"
   }
 }
