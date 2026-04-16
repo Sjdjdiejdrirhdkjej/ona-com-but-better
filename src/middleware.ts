@@ -10,23 +10,16 @@ const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
 ]);
 
-export default clerkMiddleware(
-  async (auth, req) => {
-    if (isProtectedRoute(req)) {
-      await auth.protect();
-    }
-    return handleI18nRouting(req);
-  },
-  {
-    frontendApiProxy: {
-      enabled: true,
-    },
-  },
-);
+export default clerkMiddleware(async (auth, req) => {
+  if (isProtectedRoute(req)) {
+    await auth.protect();
+  }
+  return handleI18nRouting(req);
+});
 
 export const config = {
   matcher: [
     '/((?!_next|_vercel|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    '/(api|trpc|__clerk)(.*)',
+    '/(api|trpc)(.*)',
   ],
 };
