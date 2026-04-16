@@ -244,6 +244,21 @@ export function isDaytonaTool(name: string): boolean {
   return name.startsWith('sandbox_');
 }
 
+export async function prebootSandbox(): Promise<{ sandbox_id: string; work_dir: string } | null> {
+  try {
+    const daytona = getDaytona();
+    const sandbox = await daytona.create({
+      language: 'python',
+      ephemeral: true,
+      autoStopInterval: 30,
+    });
+    const workDir = await sandbox.getWorkDir();
+    return { sandbox_id: sandbox.id, work_dir: workDir };
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteSandboxById(sandboxId: string): Promise<void> {
   try {
     const daytona = getDaytona();

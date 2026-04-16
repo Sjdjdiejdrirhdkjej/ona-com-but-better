@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/GitHub';
-import { daytonaToolDefinitions, isDaytonaTool, runDaytonaTool } from '@/libs/Daytona';
+import { daytonaToolDefinitions, isDaytonaTool, prebootSandbox, runDaytonaTool } from '@/libs/Daytona';
 import { callLibrarianToolDefinition, isCallLibrarianTool, runLibrarianSubagent } from '@/libs/Librarian';
 import { callBrowserUseToolDefinition, isCallBrowserUseTool, runBrowserUseSubagent } from '@/libs/BrowserUse';
 
@@ -822,6 +822,29 @@ export async function POST(req: NextRequest) {
           await db.update(agentJobsSchema).set({ status: 'done' }).where(eq(agentJobsSchema.id, jobId));
         }
         return;
+      }
+
+      // Pre-boot the sandbox on the very first message so it's ready before the AI starts.
+      const isFirstMessage = messages.length === 1;
+      if (isFirstMessage && process.env.DAYTONA_API_KEY) {
+        emit({ type: 'sandbox_booting' });
+        const booted = await prebootSandbox();
+        if (booted) {
+          emit({ type: 'sandbox_ready', sandbox_id: booted.sandbox_id });
+          if (conversationId) {
+            await db.update(conversationsSchema).set({ sandboxId: booted.sandbox_id }).where(eq(conversationsSchema.id, conversationId));
+          }
+          conversation.splice(1, 0,
+            {
+              role: 'user',
+              content: `[System context] A Daytona sandbox has been pre-booted for this session. sandbox_id: ${booted.sandbox_id}, work_dir: ${booted.work_dir}. Use this sandbox_id directly for all sandbox_exec, sandbox_write_file, and other sandbox calls — do NOT call sandbox_create again.`,
+            },
+            {
+              role: 'assistant',
+              content: `Understood. I have a pre-booted sandbox ready (${booted.sandbox_id}) and will use it directly.`,
+            },
+          );
+        }
       }
 
       let currentAssistantMsgId = assistantMessageId ?? crypto.randomUUID();
