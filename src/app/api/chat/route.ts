@@ -14,8 +14,8 @@ const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completion
 export const ONA_MODELS = {
   'ona-max': {
     label: 'ONA Max',
-    description: 'Kimi K2.5 — most capable',
-    fireworksId: 'accounts/fireworks/models/kimi-k2p5',
+    description: 'GLM 5.1 — most capable',
+    fireworksId: 'accounts/fireworks/models/glm-4-5-1',
   },
   'ona-max-fast': {
     label: 'ONA Max Fast',

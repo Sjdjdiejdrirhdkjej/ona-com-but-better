@@ -1741,9 +1741,9 @@ export default function AppPage() {
               {/* Model selector */}
               {(() => {
                 const MODEL_OPTIONS = [
-                  { key: 'ona-max', label: 'ONA Max', sub: 'Kimi K2.5' },
-                  { key: 'ona-max-fast', label: 'ONA Max Fast', sub: 'Kimi K2.5 Turbo' },
-                  { key: 'ona-mini', label: 'ONA Mini', sub: 'Llama 4 Scout' },
+                  { key: 'ona-max', label: 'ONA Max' },
+                  { key: 'ona-max-fast', label: 'ONA Max Fast' },
+                  { key: 'ona-mini', label: 'ONA Mini' },
                 ] as const;
                 const current = MODEL_OPTIONS.find(m => m.key === selectedModel) ?? MODEL_OPTIONS[1];
                 return (
@@ -1773,7 +1773,6 @@ export default function AppPage() {
                           >
                             <span>
                               <span className="block text-xs font-medium text-gray-900 dark:text-gray-100">{opt.label}</span>
-                              <span className="block text-xs text-gray-400 dark:text-gray-500">{opt.sub}</span>
                             </span>
                             {selectedModel === opt.key && (
                               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-indigo-500">
