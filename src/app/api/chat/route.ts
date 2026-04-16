@@ -13,17 +13,17 @@ const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completion
 
 export const ONA_MODELS = {
   'ona-max': {
-    label: 'ONA but OPEN SOURCE Max',
+    label: 'ONA Max',
     description: 'Kimi K2.5 — most capable',
     fireworksId: 'accounts/fireworks/models/kimi-k2p5',
   },
   'ona-max-fast': {
-    label: 'ONA but OPEN SOURCE Max Fast',
+    label: 'ONA Max Fast',
     description: 'Kimi K2.5 Turbo — fast & smart',
     fireworksId: 'accounts/fireworks/routers/kimi-k2p5-turbo',
   },
   'ona-mini': {
-    label: 'ONA but OPEN SOURCE Mini',
+    label: 'ONA Mini',
     description: 'MiniMax M2.7 — lightweight',
     fireworksId: 'accounts/fireworks/models/minimax-m2-7',
   },
