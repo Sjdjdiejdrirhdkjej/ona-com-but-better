@@ -8,8 +8,6 @@ const handleI18nRouting = createIntlMiddleware(routing);
 const isProtectedRoute = createRouteMatcher([
   '/:locale/dashboard(.*)',
   '/dashboard(.*)',
-  '/:locale/app(.*)',
-  '/app(.*)',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
