@@ -700,6 +700,10 @@ export async function POST(req: NextRequest) {
       let currentAssistantText = '';
       let completed = false;
 
+      // Loop detection: track the last 3 tool-call batch signatures.
+      // If all 3 are identical the agent is stuck — break out gracefully.
+      const recentBatchSigs: string[] = [];
+
       for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
         let iterText = '';
         const { content, toolCalls, finishReason } = await streamFireworksCall(
@@ -756,6 +760,29 @@ export async function POST(req: NextRequest) {
           completed = true;
           break;
         }
+
+        // ── Loop detection ───────────────────────────────────────────────────
+        // Fingerprint this tool-call batch by name + first 300 chars of args.
+        // If the last 3 batches are identical, the agent is looping — stop it.
+        const batchSig = toolCalls
+          .map(t => `${t.function.name}:${t.function.arguments.slice(0, 300)}`)
+          .join('|');
+        recentBatchSigs.push(batchSig);
+        if (recentBatchSigs.length > 3) recentBatchSigs.shift();
+
+        if (recentBatchSigs.length === 3 && recentBatchSigs.every(s => s === batchSig)) {
+          const stuckMsg = '\n\nI detected I was repeating the same actions without making progress and stopped to prevent an infinite loop. Here is what I completed so far. Please reply to continue or clarify the next step.';
+          emit({ delta: stuckMsg });
+          queueContentEvent(stuckMsg);
+          await flushContentEvent();
+          if (conversationId && currentAssistantMsgId) {
+            await saveMessage(conversationId, currentAssistantMsgId, 'assistant', currentAssistantText + stuckMsg);
+          }
+          if (jobId) await persistJobEvent(jobId, 'done', {});
+          completed = true;
+          break;
+        }
+        // ────────────────────────────────────────────────────────────────────
 
         if (iterText && conversationId && currentAssistantMsgId) {
           await flushContentEvent();

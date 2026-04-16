@@ -552,11 +552,27 @@ export async function runLibrarianSubagent(request: string, onStep?: LibrarianSt
     { role: 'user', content: request },
   ];
 
+  // Loop detection: fingerprint each batch of tool calls.
+  // If the last 3 batches are identical, the librarian is stuck — return early.
+  const recentBatchSigs: string[] = [];
+
   for (let i = 0; i < LIBRARIAN_MAX_ITERATIONS; i++) {
     const { content, toolCalls } = await librarianCall(messages);
 
     if (!toolCalls.length) {
       return content || 'The librarian found no relevant information.';
+    }
+
+    const batchSig = toolCalls
+      .map(tc => `${tc.function.name}:${tc.function.arguments.slice(0, 300)}`)
+      .join('|');
+    recentBatchSigs.push(batchSig);
+    if (recentBatchSigs.length > 3) recentBatchSigs.shift();
+
+    if (recentBatchSigs.length === 3 && recentBatchSigs.every(s => s === batchSig)) {
+      const last = messages.findLast(m => m.role === 'assistant');
+      const partial = last && 'content' in last ? (last as { content: string }).content : '';
+      return (partial || 'Research stopped: repeated identical tool calls detected without progress. The information gathered so far has been returned above.');
     }
 
     messages.push({ role: 'assistant', content, tool_calls: toolCalls });

@@ -764,12 +764,28 @@ export async function runBrowserUseSubagent(
     { role: 'user', content: task },
   ];
 
+  // Loop detection: fingerprint each tool-call batch.
+  // If the last 3 batches are identical, the agent is stuck — stop and return.
+  const recentBatchSigs: string[] = [];
+
   try {
     for (let i = 0; i < BROWSER_USE_MAX_ITERATIONS; i++) {
       const { content, toolCalls } = await browserUseCall(messages);
 
       if (!toolCalls.length) {
         return content || 'The browser use expert completed the task with no further output.';
+      }
+
+      const batchSig = toolCalls
+        .map(tc => `${tc.function.name}:${tc.function.arguments.slice(0, 300)}`)
+        .join('|');
+      recentBatchSigs.push(batchSig);
+      if (recentBatchSigs.length > 3) recentBatchSigs.shift();
+
+      if (recentBatchSigs.length === 3 && recentBatchSigs.every(s => s === batchSig)) {
+        const last = messages.findLast(m => m.role === 'assistant');
+        const partial = last && 'content' in last ? (last as { content: string }).content : '';
+        return partial || 'Browser automation stopped: repeated identical actions detected without progress. Please check the task description or provide updated instructions.';
       }
 
       // Add assistant message with tool calls
