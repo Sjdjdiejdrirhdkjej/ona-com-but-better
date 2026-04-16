@@ -1,120 +1,241 @@
 /**
  * Browser Use Expert subagent — invoked exclusively by the main Ona AI via `call_browser_use`.
  *
- * Architecture:
+ * Architecture (Hermes-inspired):
  *   Main AI ──call_browser_use──▶ runBrowserUseSubagent()
- *                                    └── own Fireworks call
- *                                    └── own agentic loop (up to 15 rounds)
- *                                    └── restricted toolset (3 browser tools)
+ *                                    └── creates Firecrawl CDP session (/v2/browser)
+ *                                    └── connects Playwright over CDP
+ *                                    └── own Fireworks agentic loop (up to 20 rounds)
+ *                                    └── granular tools: navigate / snapshot / click / type / scroll / press / select / screenshot / search
+ *                                    └── accessibility tree representation (no vision needed)
+ *                                    └── closes CDP session when done
  *                                    └── returns synthesised report ──▶ Main AI
  *
- * The internal tools are NEVER exposed to the main AI directly.
- * Uses Firecrawl's hosted cloud browser for real browser automation with
- * full JavaScript rendering, interaction capabilities, and screenshots.
+ * Key difference from naive scrape approach:
+ *   - PERSISTENT SESSION: one cloud browser session shared across all tool calls
+ *     → enables login, multi-step forms, SPA navigation, cookie persistence
+ *   - ACCESSIBILITY TREE: page represented as structured text with @eN ref IDs
+ *     → works with any text model (no vision/computer-use model required)
+ *   - GRANULAR TOOLS: separate navigate/snapshot/click/type tools like Hermes
+ *     → precise iterative interaction instead of bundled single-shot scrape
  */
 
+import { chromium } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
+
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
-const BROWSER_USE_MODEL = process.env.FIREWORKS_BROWSER_MODEL ?? 'accounts/fireworks/models/kimi-k2-instruct-0905';
-const BROWSER_USE_MAX_ITERATIONS = 15;
+const BROWSER_USE_MODEL =
+  process.env.FIREWORKS_BROWSER_MODEL ?? 'accounts/fireworks/models/kimi-k2-instruct-0905';
+const BROWSER_USE_MAX_ITERATIONS = 20;
+const FIRECRAWL_BASE_URL = process.env.FIRECRAWL_API_URL ?? 'https://api.firecrawl.dev';
+const FIRECRAWL_SESSION_TTL = Number(process.env.FIRECRAWL_BROWSER_TTL ?? '300');
 
-const CURRENT_YEAR = new Date().getFullYear();
+// ── Accessibility tree snapshot ───────────────────────────────────────────────
 
-const BROWSER_USE_SYSTEM_PROMPT = `# THE BROWSER USE EXPERT
+interface AccessNode {
+  role: string;
+  name?: string;
+  value?: string;
+  description?: string;
+  disabled?: boolean;
+  children?: AccessNode[];
+}
 
-You are the **BROWSER USE EXPERT**, a specialist browser automation agent inside the Ona engineering system.
+const INTERACTIVE_ROLES = new Set([
+  'button', 'link', 'textbox', 'searchbox', 'combobox', 'listbox', 'option',
+  'checkbox', 'radio', 'menuitem', 'menuitemcheckbox', 'menuitemradio',
+  'tab', 'spinbutton', 'slider', 'switch', 'treeitem', 'gridcell',
+]);
 
-Your job: complete tasks that require real web browser interaction — navigating pages, clicking elements, filling forms, waiting for dynamic content, taking screenshots, and extracting data from live websites.
+interface RefEntry {
+  role: string;
+  name: string;
+}
 
-You operate a real cloud-hosted browser (via Firecrawl) that fully renders JavaScript, handles SPAs, runs behind-the-scenes network requests, and captures actual screenshots.
+function buildSnapshot(node: AccessNode, refMap: Map<string, RefEntry>, counter: { n: number }, depth = 0): string[] {
+  const lines: string[] = [];
+  const indent = '  '.repeat(depth);
+  const isInteractive = INTERACTIVE_ROLES.has(node.role);
 
----
+  if (isInteractive && node.name) {
+    const ref = `e${++counter.n}`;
+    refMap.set(ref, { role: node.role, name: node.name });
+    const val = node.value ? ` = "${node.value}"` : '';
+    const dis = node.disabled ? ' (disabled)' : '';
+    lines.push(`${indent}[@${ref}] ${node.role} "${node.name}"${val}${dis}`);
+  } else if (node.name && !['none', 'generic', 'group', 'presentation', 'ignored'].includes(node.role)) {
+    lines.push(`${indent}${node.role} "${node.name}"`);
+  }
 
-## CURRENT DATE CONTEXT
+  const nextDepth = node.role !== 'none' && node.role !== 'generic' ? depth + 1 : depth;
+  for (const child of node.children ?? []) {
+    lines.push(...buildSnapshot(child, refMap, counter, nextDepth));
+  }
+  return lines;
+}
 
-Today is ${CURRENT_YEAR}. Always use up-to-date URLs and be aware that web UIs may differ from documentation from ${CURRENT_YEAR - 1} or earlier.
+// ── Firecrawl CDP session lifecycle ──────────────────────────────────────────
 
----
+async function firecrawlCreateSession(): Promise<{ sessionId: string; cdpUrl: string }> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey) throw new Error('FIRECRAWL_API_KEY is not configured.');
 
-## YOUR CAPABILITIES
+  const res = await fetch(`${FIRECRAWL_BASE_URL}/v2/browser`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ ttl: FIRECRAWL_SESSION_TTL }),
+    signal: AbortSignal.timeout(30000),
+  });
 
-### Core browser tools
-- **browse** — Navigate to any URL with an optional sequence of browser actions (click, type, scroll, wait, hover, press). Returns the rendered page as Markdown and optionally a screenshot. This is your primary tool for all page interactions.
-- **screenshot** — Take a full-page screenshot of any URL after optional interactions. Returns the screenshot URL for visual inspection.
-- **search_web** — Search the web via DuckDuckGo. Returns ranked URLs with snippets. Follow up with \`browse\` to visit the best results.
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw new Error(`Firecrawl /v2/browser failed (${res.status}): ${text}`);
+  }
 
-### Supported browser actions (inside \`browse\` and \`screenshot\`)
-Actions are performed in order before the page content is captured:
-- \`{ "type": "click", "selector": "CSS_SELECTOR" }\` — Click an element by CSS selector
-- \`{ "type": "type", "selector": "CSS_SELECTOR", "text": "VALUE" }\` — Type into an input field
-- \`{ "type": "wait", "milliseconds": 2000 }\` — Wait N milliseconds for content to load
-- \`{ "type": "scroll", "direction": "down", "amount": 500 }\` — Scroll the page
-- \`{ "type": "hover", "selector": "CSS_SELECTOR" }\` — Hover over an element (triggers tooltips/dropdowns)
-- \`{ "type": "press", "key": "Enter" }\` — Press a keyboard key
-- \`{ "type": "select", "selector": "CSS_SELECTOR", "value": "OPTION_VALUE" }\` — Select a dropdown option
+  const data = await res.json() as { id: string; cdpUrl: string };
+  return { sessionId: data.id, cdpUrl: data.cdpUrl };
+}
 
----
+async function firecrawlCloseSession(sessionId: string): Promise<void> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey) return;
+  try {
+    await fetch(`${FIRECRAWL_BASE_URL}/v2/browser/${sessionId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    // best-effort cleanup
+  }
+}
 
-## TASK STRATEGY
+// ── Browser session state ─────────────────────────────────────────────────────
 
-### Phase 1 — Plan before acting
-Before performing any actions, briefly assess:
-1. What is the task? What page(s) do I need to visit?
-2. Are there login/auth requirements? (Note: you can fill login forms if credentials are provided)
-3. What is the expected outcome? (data extracted, screenshot taken, form submitted, etc.)
-4. What is my step-by-step plan?
+class BrowserSession {
+  private browser: Browser | null = null;
+  private page: Page | null = null;
+  private sessionId: string | null = null;
+  private refMap: Map<string, RefEntry> = new Map();
 
-### Phase 2 — Navigate and orient
-1. Browse to the starting URL.
-2. Read the page Markdown carefully to understand the current page structure and available elements.
-3. Identify the relevant CSS selectors, links, and form fields.
+  async open(): Promise<void> {
+    const { sessionId, cdpUrl } = await firecrawlCreateSession();
+    this.sessionId = sessionId;
+    this.browser = await chromium.connectOverCDP(cdpUrl, { timeout: 30000 });
+    const contexts = this.browser.contexts();
+    const context = contexts[0] ?? await this.browser.newContext();
+    const pages = context.pages();
+    this.page = pages[0] ?? await context.newPage();
+  }
 
-### Phase 3 — Interact iteratively
-Take one logical action group at a time:
-- Navigate → read result → identify next action → interact → read result → continue
-- Take a screenshot after significant interactions to confirm the browser state visually
-- Always wait after actions that trigger navigation or async loading (use \`wait\` action)
+  getPage(): Page {
+    if (!this.page) throw new Error('Browser session not open. Call browser_navigate first.');
+    return this.page;
+  }
 
-### Phase 4 — Extract and report
-Synthesise everything you observed into a clear, structured report.
+  async getSnapshot(full = false): Promise<string> {
+    const page = this.getPage();
+    this.refMap.clear();
+    const counter = { n: 0 };
 
----
+    // Use accessibility.snapshot() — stable across Playwright versions
+    const tree = await page.accessibility.snapshot({ interestingOnly: !full }) as AccessNode | null;
+    if (!tree) return 'No accessible content found on this page.';
 
-## BEST PRACTICES
+    const lines = buildSnapshot(tree, this.refMap, counter, 0);
+    const header = `Page: ${page.url()}\n\n`;
 
-- **Use CSS selectors precisely**: Prefer `id` selectors (`#submit-btn`) over fragile class chains. Inspect the Markdown for element IDs and names.
-- **Wait after interactions**: Clicks that trigger navigation or AJAX need a \`wait\` action immediately after.
-- **Take screenshots at key moments**: Use \`screenshot\` after completing significant steps so the result is visually verifiable.
-- **Never fabricate results**: Only report what you actually observed from tool outputs. Never hallucinate page content.
-- **Handle errors gracefully**: If a selector is not found or a page fails to load, try an alternative approach — different selector, different URL structure, or search for the correct URL first.
-- **Search before assuming URLs**: If unsure of a URL, use \`search_web\` first, then browse the best result.
+    if (lines.length === 0) {
+      return header + '(No accessible elements found — try with full=true or take a screenshot)';
+    }
 
----
+    const body = lines.join('\n');
+    const note = counter.n > 0
+      ? `\n\n${counter.n} interactive element(s) with [@ref] IDs above. Use browser_click(@eN) or browser_type(@eN, text) to interact.`
+      : '';
 
-## FAILURE RECOVERY
+    return header + body + note;
+  }
 
-- **Page fails to load** → try \`search_web\` to find the correct URL; try a mirror or alternative domain
-- **Selector not found** → read the page Markdown carefully for the correct selector; try a broader selector; try searching the HTML for landmarks
-- **Dynamic content not visible** → add a longer \`wait\` action (2000–5000ms); try scrolling down first
-- **Form submission fails** → check if there is a CAPTCHA or JS validation; report clearly if blocked
-- **Login required** → note the requirement; describe what credentials are needed; stop and report if none provided
-- **Paywalled content** → stop immediately; note the paywall; suggest alternatives
+  async clickRef(ref: string): Promise<string> {
+    const page = this.getPage();
+    const key = ref.replace('@', '');
+    const entry = this.refMap.get(key);
+    if (!entry) {
+      throw new Error(
+        `Ref ${ref} not found. Call browser_snapshot first to refresh element refs. ` +
+        `Available refs: ${[...this.refMap.keys()].map(k => `@${k}`).join(', ') || 'none'}`
+      );
+    }
+    await page.getByRole(entry.role as Parameters<Page['getByRole']>[0], { name: entry.name }).first().click({ timeout: 10000 });
+    return `Clicked ${entry.role} "${entry.name}"`;
+  }
 
----
+  async typeRef(ref: string, text: string, clear = true): Promise<string> {
+    const page = this.getPage();
+    const key = ref.replace('@', '');
+    const entry = this.refMap.get(key);
+    if (!entry) {
+      throw new Error(
+        `Ref ${ref} not found. Call browser_snapshot first. ` +
+        `Available refs: ${[...this.refMap.keys()].map(k => `@${k}`).join(', ') || 'none'}`
+      );
+    }
+    const locator = page.getByRole(entry.role as Parameters<Page['getByRole']>[0], { name: entry.name }).first();
+    if (clear) await locator.clear({ timeout: 5000 });
+    await locator.type(text, { delay: 20 });
+    return `Typed "${text}" into ${entry.role} "${entry.name}"`;
+  }
 
-## OUTPUT FORMAT
+  async navigate(url: string, waitFor: 'load' | 'domcontentloaded' | 'networkidle' = 'load'): Promise<string> {
+    const page = this.getPage();
+    await page.goto(url, { waitUntil: waitFor, timeout: 30000 });
+    const snapshot = await this.getSnapshot(false);
+    return `Navigated to ${url}\n\n${snapshot}`;
+  }
 
-Return a structured Markdown report with all sections that apply to the task:
+  async scroll(direction: 'up' | 'down', amount = 500): Promise<string> {
+    const page = this.getPage();
+    await page.evaluate(
+      ([dir, px]) => window.scrollBy(0, dir === 'down' ? Number(px) : -Number(px)),
+      [direction, amount],
+    );
+    return `Scrolled ${direction} by ${amount}px`;
+  }
 
-- **Summary**: 2–4 sentence direct answer to what was accomplished or found.
-- **Steps performed**: Ordered list of what you did, what was clicked/typed/submitted.
-- **Extracted data**: Tables, lists, code blocks, or structured content pulled from the page(s).
-- **Screenshots taken**: Reference the screenshot URLs captured for visual confirmation.
-- **Errors encountered**: Any failures, blocked elements, or unexpected page states.
-- **Recommendations**: Suggested next steps if the task is incomplete or requires human action.
+  async press(key: string): Promise<string> {
+    const page = this.getPage();
+    await page.keyboard.press(key);
+    return `Pressed key: ${key}`;
+  }
 
-Be precise, factual, and implementation-ready. The main agent will act on your report.`;
+  async select(ref: string, value: string): Promise<string> {
+    const page = this.getPage();
+    const key = ref.replace('@', '');
+    const entry = this.refMap.get(key);
+    if (!entry) throw new Error(`Ref ${ref} not found. Call browser_snapshot first.`);
+    const locator = page.getByRole(entry.role as Parameters<Page['getByRole']>[0], { name: entry.name }).first();
+    await locator.selectOption(value, { timeout: 5000 });
+    return `Selected "${value}" in ${entry.role} "${entry.name}"`;
+  }
 
-// ── Internal tool definitions (only seen by the browser use subagent) ─────────
+  async screenshot(): Promise<string> {
+    const page = this.getPage();
+    const buf = await page.screenshot({ type: 'png', fullPage: false });
+    return `data:image/png;base64,${buf.toString('base64')}`;
+  }
+
+  async close(): Promise<void> {
+    try { await this.browser?.close(); } catch { /* ignore */ }
+    if (this.sessionId) await firecrawlCloseSession(this.sessionId);
+    this.browser = null;
+    this.page = null;
+    this.sessionId = null;
+    this.refMap.clear();
+  }
+}
+
+// ── Internal tool definitions ─────────────────────────────────────────────────
 
 type ToolDefinition = {
   type: 'function';
@@ -125,97 +246,26 @@ type ToolDefinition = {
   };
 };
 
-const BROWSER_ACTIONS_SCHEMA = {
-  type: 'array',
-  description: 'Optional ordered list of browser actions to perform before capturing the page. Actions run in sequence.',
-  items: {
-    type: 'object',
-    oneOf: [
-      {
-        description: 'Click an element by CSS selector.',
-        required: ['type', 'selector'],
-        properties: {
-          type: { type: 'string', const: 'click' },
-          selector: { type: 'string', description: 'CSS selector of the element to click.' },
-        },
-        additionalProperties: false,
-      },
-      {
-        description: 'Type text into an input or textarea.',
-        required: ['type', 'selector', 'text'],
-        properties: {
-          type: { type: 'string', const: 'type' },
-          selector: { type: 'string', description: 'CSS selector of the input element.' },
-          text: { type: 'string', description: 'Text to type into the element.' },
-        },
-        additionalProperties: false,
-      },
-      {
-        description: 'Wait a fixed number of milliseconds (e.g. for page load or animations).',
-        required: ['type', 'milliseconds'],
-        properties: {
-          type: { type: 'string', const: 'wait' },
-          milliseconds: { type: 'number', description: 'Number of milliseconds to wait (max 10000).' },
-        },
-        additionalProperties: false,
-      },
-      {
-        description: 'Scroll the page in a direction.',
-        required: ['type', 'direction'],
-        properties: {
-          type: { type: 'string', const: 'scroll' },
-          direction: { type: 'string', enum: ['up', 'down'], description: 'Scroll direction.' },
-          amount: { type: 'number', description: 'Pixels to scroll (default 500).' },
-        },
-        additionalProperties: false,
-      },
-      {
-        description: 'Hover over an element to reveal tooltips or dropdown menus.',
-        required: ['type', 'selector'],
-        properties: {
-          type: { type: 'string', const: 'hover' },
-          selector: { type: 'string', description: 'CSS selector of the element to hover over.' },
-        },
-        additionalProperties: false,
-      },
-      {
-        description: 'Press a keyboard key (e.g. Enter, Escape, Tab, ArrowDown).',
-        required: ['type', 'key'],
-        properties: {
-          type: { type: 'string', const: 'press' },
-          key: { type: 'string', description: 'Key name (e.g. "Enter", "Escape", "Tab", "ArrowDown").' },
-        },
-        additionalProperties: false,
-      },
-      {
-        description: 'Select an option from a <select> dropdown.',
-        required: ['type', 'selector', 'value'],
-        properties: {
-          type: { type: 'string', const: 'select' },
-          selector: { type: 'string', description: 'CSS selector of the <select> element.' },
-          value: { type: 'string', description: 'The value attribute of the <option> to select.' },
-        },
-        additionalProperties: false,
-      },
-    ],
-  },
-};
-
 const INTERNAL_TOOLS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
-      name: 'browse',
+      name: 'browser_navigate',
       description:
-        'Navigate to a URL using a real cloud-hosted browser that fully renders JavaScript, performs browser actions (click, type, scroll, wait, hover, press, select) in sequence, then returns the page as clean Markdown and optionally a screenshot. This is your primary tool for all browser interactions — reading pages, clicking buttons, filling forms, and extracting rendered content.',
+        'Navigate to a URL in the cloud browser. Creates the browser session if not started. ' +
+        'Returns a compact accessibility tree snapshot of the loaded page with interactive element ref IDs (like @e1, @e2). ' +
+        'Use this first before any other browser tool. ' +
+        'For simple content reading, prefer this over browser_snapshot — navigation already returns a snapshot.',
       parameters: {
         type: 'object',
         required: ['url'],
         properties: {
           url: { type: 'string', description: 'Fully-qualified URL (https://...) to navigate to.' },
-          actions: BROWSER_ACTIONS_SCHEMA,
-          include_screenshot: { type: 'boolean', description: 'If true, also capture and return a screenshot URL (default false).' },
-          max_chars: { type: 'number', description: 'Max characters of Markdown content to return (default 40000, max 100000).' },
+          wait_for: {
+            type: 'string',
+            enum: ['load', 'domcontentloaded', 'networkidle'],
+            description: 'Navigation wait condition. Use "networkidle" for SPAs that fetch data after load (default: "load").',
+          },
         },
         additionalProperties: false,
       },
@@ -224,16 +274,124 @@ const INTERNAL_TOOLS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
-      name: 'screenshot',
+      name: 'browser_snapshot',
       description:
-        'Take a full-page screenshot of a URL using a real cloud-hosted browser after performing optional browser actions. Returns the screenshot URL. Use this to visually confirm page state after interactions, or when the task explicitly requires capturing a visual snapshot.',
+        'Get the current page\'s accessibility tree as structured text with interactive element ref IDs (@e1, @e2, etc.). ' +
+        'Call this after interactions (click, type, press) to see updated page state. ' +
+        'full=false (default): compact view showing only interactive elements. ' +
+        'full=true: complete content tree including text nodes. ' +
+        'Ref IDs reset on each snapshot call — always use refs from the most recent snapshot.',
       parameters: {
         type: 'object',
-        required: ['url'],
         properties: {
-          url: { type: 'string', description: 'Fully-qualified URL (https://...) to screenshot.' },
-          actions: BROWSER_ACTIONS_SCHEMA,
+          full: {
+            type: 'boolean',
+            description: 'If true, returns all page content. If false (default), returns interactive elements only.',
+          },
         },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_click',
+      description:
+        'Click an interactive element using its ref ID from the most recent snapshot (e.g. "@e3"). ' +
+        'Always call browser_snapshot first to get current refs. ' +
+        'After clicking, call browser_snapshot again to see the updated page state.',
+      parameters: {
+        type: 'object',
+        required: ['ref'],
+        properties: {
+          ref: { type: 'string', description: 'Element ref from snapshot, e.g. "@e5" or "@e12".' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_type',
+      description:
+        'Type text into an input field or textarea using its ref ID from the most recent snapshot. ' +
+        'Clears the field first by default. Use browser_press("Enter") after typing to submit forms.',
+      parameters: {
+        type: 'object',
+        required: ['ref', 'text'],
+        properties: {
+          ref: { type: 'string', description: 'Input field ref from snapshot, e.g. "@e2".' },
+          text: { type: 'string', description: 'Text to type into the field.' },
+          clear: {
+            type: 'boolean',
+            description: 'Whether to clear the field before typing (default: true).',
+          },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_press',
+      description:
+        'Press a keyboard key on the current page (e.g. "Enter", "Escape", "Tab", "ArrowDown"). ' +
+        'Use "Enter" to submit forms after typing, "Escape" to dismiss dialogs.',
+      parameters: {
+        type: 'object',
+        required: ['key'],
+        properties: {
+          key: { type: 'string', description: 'Key name: "Enter", "Escape", "Tab", "ArrowDown", "ArrowUp", "Space", etc.' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_scroll',
+      description: 'Scroll the page up or down. Use to reveal content below the fold, load lazy content, or reach elements not yet visible.',
+      parameters: {
+        type: 'object',
+        required: ['direction'],
+        properties: {
+          direction: { type: 'string', enum: ['up', 'down'], description: 'Scroll direction.' },
+          amount: { type: 'number', description: 'Pixels to scroll (default: 500).' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_select',
+      description: 'Select an option from a <select> dropdown element using its ref ID.',
+      parameters: {
+        type: 'object',
+        required: ['ref', 'value'],
+        properties: {
+          ref: { type: 'string', description: 'Dropdown element ref from snapshot.' },
+          value: { type: 'string', description: 'The option value or label to select.' },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_screenshot',
+      description:
+        'Take a screenshot of the current browser viewport. Returns a base64-encoded PNG data URL. ' +
+        'Use to visually confirm page state, debug unexpected layouts, or capture CAPTCHAs.',
+      parameters: {
+        type: 'object',
+        properties: {},
         additionalProperties: false,
       },
     },
@@ -243,13 +401,15 @@ const INTERNAL_TOOLS: ToolDefinition[] = [
     function: {
       name: 'search_web',
       description:
-        'Search the web via DuckDuckGo and return a ranked list of page titles and URLs with snippets. Use to find the correct URL before navigating, or to discover relevant pages when the starting URL is unknown. Always follow up by browsing the best results.',
+        'Search the web via DuckDuckGo and return a ranked list of page titles, URLs, and snippets. ' +
+        'Use this when you don\'t know the correct URL to navigate to. ' +
+        'Follow up with browser_navigate on the best result.',
       parameters: {
         type: 'object',
         required: ['query'],
         properties: {
           query: { type: 'string', description: 'Search query.' },
-          max_results: { type: 'number', description: 'Number of results (default 8, max 20).' },
+          max_results: { type: 'number', description: 'Number of results to return (default: 8, max: 20).' },
         },
         additionalProperties: false,
       },
@@ -257,7 +417,90 @@ const INTERNAL_TOOLS: ToolDefinition[] = [
   },
 ];
 
-// ── HTML → plain-text ────────────────────────────────────────────────────────
+// ── System prompt ─────────────────────────────────────────────────────────────
+
+const CURRENT_DATE = new Date().toISOString().slice(0, 10);
+
+const BROWSER_USE_SYSTEM_PROMPT = `You are the **BROWSER USE EXPERT**, a specialist browser automation agent inside the Ona engineering system.
+
+Your job: complete tasks requiring real web browser interaction using a persistent cloud-hosted browser session.
+
+Today is ${CURRENT_DATE}.
+
+---
+
+## HOW THE BROWSER WORKS
+
+You control a persistent cloud browser via Playwright over CDP. Pages are represented as **accessibility trees** — structured text with interactive element ref IDs like \`@e1\`, \`@e2\`. You do not see images or screenshots unless you explicitly call \`browser_screenshot\`.
+
+**Ref IDs are regenerated on every \`browser_snapshot\` call.** Always use refs from the most recent snapshot.
+
+---
+
+## CORE WORKFLOW
+
+### Step 1 — Navigate
+Call \`browser_navigate(url)\` first. It returns a compact accessibility tree of the loaded page.
+
+### Step 2 — Orient
+Read the snapshot carefully:
+- Interactive elements have \`[@eN]\` refs: \`[@e3] button "Sign in"\`, \`[@e1] textbox "Email"\`
+- Use these refs for clicks and typing
+
+### Step 3 — Interact iteratively
+- \`browser_type(@eN, "text")\` to fill a field
+- \`browser_press("Enter")\` to submit a form
+- \`browser_click(@eN)\` to click a button or link
+- After each interaction: call \`browser_snapshot\` to see the updated page
+
+### Step 4 — Extract and report
+Synthesise everything observed into a structured Markdown report.
+
+---
+
+## TOOL SELECTION GUIDE
+
+| Situation | Tool |
+|-----------|------|
+| Don't know the URL | \`search_web\` first, then \`browser_navigate\` the best result |
+| Load a page | \`browser_navigate(url)\` |
+| See what's on the page | \`browser_snapshot\` |
+| Click a button or link | \`browser_click(@eN)\` |
+| Fill a text field | \`browser_type(@eN, "text")\` |
+| Submit a form | \`browser_press("Enter")\` |
+| Open a dropdown | \`browser_click(@eN)\` then \`browser_snapshot\` |
+| Select dropdown option | \`browser_select(@eN, "value")\` |
+| Content below the fold | \`browser_scroll("down")\` then \`browser_snapshot\` |
+| Lazy-loaded SPA content | \`browser_navigate(url, "networkidle")\` |
+| Dismiss a dialog | \`browser_press("Escape")\` |
+| Confirm visual state | \`browser_screenshot\` |
+
+---
+
+## RULES
+
+- **Never fabricate page content.** Only report what tool outputs actually showed.
+- **Always take a snapshot after clicking or typing** to confirm the result.
+- **Use search_web when unsure of a URL** — never guess URLs that might return 404.
+- **If a ref is missing**: take a fresh \`browser_snapshot\` to get current refs.
+- **Login required**: fill credentials if provided; otherwise report what credentials are needed and stop.
+- **CAPTCHA blocked**: call \`browser_screenshot\` to document it; report clearly and stop.
+- **Paywall**: stop immediately; note the paywall; do not attempt to bypass.
+
+---
+
+## OUTPUT FORMAT
+
+Return a structured Markdown report with all applicable sections:
+
+- **Summary**: Direct answer — what was accomplished or found (2–4 sentences).
+- **Steps performed**: Ordered list of actions taken.
+- **Extracted data**: Tables, lists, or structured content from the page.
+- **Screenshots**: Include base64 data URLs if screenshots were taken.
+- **Errors / blockers**: Any failures, CAPTCHAs, paywalls, or unexpected states.
+- **Recommendations**: Suggested next steps if the task is incomplete.`;
+
+// ── HTML utils ────────────────────────────────────────────────────────────────
 
 function stripHtml(raw: string): string {
   return raw
@@ -274,159 +517,117 @@ function stripHtml(raw: string): string {
     .trim();
 }
 
-async function httpFetch(url: string, opts?: RequestInit): Promise<Response> {
-  return fetch(url, {
-    ...opts,
-    signal: AbortSignal.timeout(30000),
+// ── DuckDuckGo search ─────────────────────────────────────────────────────────
+
+async function searchWeb(query: string, maxResults = 8): Promise<unknown> {
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=us-en`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Ona-BrowserUse/1.0)', Accept: 'text/html' },
+    signal: AbortSignal.timeout(15000),
   });
+  const html = await res.text();
+  const capped = Math.min(maxResults, 20);
+
+  const results: Array<{ title: string; url: string; snippet: string }> = [];
+  const linkRe = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const snippetRe = /<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+  const snippets: string[] = [];
+
+  let m: RegExpExecArray | null;
+  while ((m = snippetRe.exec(html)) !== null) snippets.push(stripHtml(m[1] ?? ''));
+
+  let idx = 0;
+  while ((m = linkRe.exec(html)) !== null && results.length < capped) {
+    let href = m[1] ?? '';
+    const title = stripHtml(m[2] ?? '').trim();
+    if (href.startsWith('//duckduckgo.com/l/?')) {
+      const uddg = new URLSearchParams(href.split('?')[1] ?? '').get('uddg');
+      if (uddg) href = decodeURIComponent(uddg);
+    }
+    if (!href.startsWith('http') || !title) { idx++; continue; }
+    results.push({ title, url: href, snippet: snippets[idx] ?? '' });
+    idx++;
+  }
+  return { query, result_count: results.length, results };
 }
 
-// ── Firecrawl browser executor ───────────────────────────────────────────────
+// ── Internal tool executor ────────────────────────────────────────────────────
 
-const FIRECRAWL_SCRAPE_URL = 'https://api.firecrawl.dev/v1/scrape';
-
-type FirecrawlAction =
-  | { type: 'click'; selector: string }
-  | { type: 'type'; selector: string; text: string }
-  | { type: 'wait'; milliseconds: number }
-  | { type: 'scroll'; direction: 'up' | 'down'; amount?: number }
-  | { type: 'hover'; selector: string }
-  | { type: 'press'; key: string }
-  | { type: 'select'; selector: string; value: string };
-
-type FirecrawlScrapeResponse = {
-  success: boolean;
-  data?: {
-    markdown?: string;
-    screenshot?: string;
-    metadata?: Record<string, unknown>;
-  };
-  error?: string;
-};
-
-async function firecrawlScrape(opts: {
-  url: string;
-  actions?: FirecrawlAction[];
-  formats: Array<'markdown' | 'screenshot'>;
-  maxChars?: number;
-}): Promise<{ markdown: string; screenshot?: string; url: string }> {
-  const apiKey = process.env.FIRECRAWL_API_KEY;
-  if (!apiKey) {
-    throw new Error('FIRECRAWL_API_KEY is not configured — the browser tool is unavailable. Report this to the main agent.');
-  }
-
-  const body: Record<string, unknown> = {
-    url: opts.url,
-    formats: opts.formats,
-  };
-  if (opts.actions && opts.actions.length > 0) {
-    body.actions = opts.actions;
-  }
-
-  const res = await httpFetch(FIRECRAWL_SCRAPE_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText);
-    throw new Error(`Firecrawl error (${res.status}) for ${opts.url}: ${errText}`);
-  }
-
-  const data = await res.json() as FirecrawlScrapeResponse;
-  if (!data.success) {
-    throw new Error(`Firecrawl returned success=false for ${opts.url}: ${data.error ?? 'unknown error'}`);
-  }
-
-  const maxChars = Math.min(opts.maxChars ?? 40000, 100000);
-  const markdown = (data.data?.markdown ?? '').slice(0, maxChars);
-  const screenshot = data.data?.screenshot ?? undefined;
-
-  return { markdown, screenshot, url: opts.url };
-}
-
-// ── Internal tool executor ───────────────────────────────────────────────────
-
-async function runInternalTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-  if (name === 'browse') {
-    const url = String(args.url ?? '');
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      throw new Error('url must start with http:// or https://');
-    }
-    const actions = Array.isArray(args.actions) ? args.actions as FirecrawlAction[] : [];
-    const includeScreenshot = Boolean(args.include_screenshot);
-    const maxChars = typeof args.max_chars === 'number' ? args.max_chars : 40000;
-
-    const formats: Array<'markdown' | 'screenshot'> = ['markdown'];
-    if (includeScreenshot) formats.push('screenshot');
-
-    const result = await firecrawlScrape({ url, actions, formats, maxChars });
-    return {
-      url: result.url,
-      char_count: result.markdown.length,
-      markdown: result.markdown,
-      screenshot_url: result.screenshot ?? null,
-      actions_performed: actions.length,
-    };
-  }
-
-  if (name === 'screenshot') {
-    const url = String(args.url ?? '');
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      throw new Error('url must start with http:// or https://');
-    }
-    const actions = Array.isArray(args.actions) ? args.actions as FirecrawlAction[] : [];
-
-    const result = await firecrawlScrape({ url, actions, formats: ['screenshot', 'markdown'], maxChars: 5000 });
-    return {
-      url: result.url,
-      screenshot_url: result.screenshot ?? null,
-      page_summary: result.markdown.slice(0, 500),
-      actions_performed: actions.length,
-    };
-  }
-
-  if (name === 'search_web') {
-    const query = String(args.query ?? '').trim();
-    if (!query) throw new Error('query is required');
-    const maxResults = Math.min(Number(args.max_results ?? 8), 20);
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=us-en`;
-
-    const res = await httpFetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Ona-BrowserUse/1.0)', Accept: 'text/html' },
-    });
-    const html = await res.text();
-
-    const results: Array<{ title: string; url: string; snippet: string }> = [];
-    const linkRe = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-    const snippetRe = /<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
-    const snippets: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = snippetRe.exec(html)) !== null) snippets.push(stripHtml(m[1] ?? ''));
-
-    let idx = 0;
-    while ((m = linkRe.exec(html)) !== null && results.length < maxResults) {
-      let href = m[1] ?? '';
-      const title = stripHtml(m[2] ?? '').trim();
-      if (href.startsWith('//duckduckgo.com/l/?')) {
-        const uddg = new URLSearchParams(href.split('?')[1] ?? '').get('uddg');
-        if (uddg) href = decodeURIComponent(uddg);
+async function runInternalTool(
+  name: string,
+  args: Record<string, unknown>,
+  session: BrowserSession,
+): Promise<unknown> {
+  switch (name) {
+    case 'browser_navigate': {
+      const url = String(args.url ?? '');
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        throw new Error('url must start with http:// or https://');
       }
-      if (!href.startsWith('http') || !title) { idx++; continue; }
-      results.push({ title, url: href, snippet: snippets[idx] ?? '' });
-      idx++;
+      const waitFor = (['load', 'domcontentloaded', 'networkidle'] as const).includes(
+        args.wait_for as 'load',
+      )
+        ? (args.wait_for as 'load' | 'domcontentloaded' | 'networkidle')
+        : 'load';
+      return await session.navigate(url, waitFor);
     }
-    return { query, result_count: results.length, results };
-  }
 
-  throw new Error(`Unknown browser use internal tool: ${name}`);
+    case 'browser_snapshot': {
+      const full = Boolean(args.full);
+      return await session.getSnapshot(full);
+    }
+
+    case 'browser_click': {
+      const ref = String(args.ref ?? '');
+      if (!ref) throw new Error('ref is required');
+      return await session.clickRef(ref);
+    }
+
+    case 'browser_type': {
+      const ref = String(args.ref ?? '');
+      const text = String(args.text ?? '');
+      if (!ref) throw new Error('ref is required');
+      const clear = args.clear !== false;
+      return await session.typeRef(ref, text, clear);
+    }
+
+    case 'browser_press': {
+      const key = String(args.key ?? '');
+      if (!key) throw new Error('key is required');
+      return await session.press(key);
+    }
+
+    case 'browser_scroll': {
+      const direction = args.direction === 'up' ? 'up' : 'down';
+      const amount = typeof args.amount === 'number' ? args.amount : 500;
+      return await session.scroll(direction, amount);
+    }
+
+    case 'browser_select': {
+      const ref = String(args.ref ?? '');
+      const value = String(args.value ?? '');
+      if (!ref || !value) throw new Error('ref and value are required');
+      return await session.select(ref, value);
+    }
+
+    case 'browser_screenshot': {
+      const dataUrl = await session.screenshot();
+      return { screenshot: dataUrl, note: 'Screenshot captured as base64 PNG data URL.' };
+    }
+
+    case 'search_web': {
+      const query = String(args.query ?? '').trim();
+      if (!query) throw new Error('query is required');
+      const maxResults = Math.min(Number(args.max_results ?? 8), 20);
+      return await searchWeb(query, maxResults);
+    }
+
+    default:
+      throw new Error(`Unknown browser use internal tool: ${name}`);
+  }
 }
 
-// ── Internal message types ───────────────────────────────────────────────────
+// ── Internal message types ────────────────────────────────────────────────────
 
 type BrowserUseToolCall = {
   id: string;
@@ -453,12 +654,12 @@ type FireworksNonStreamResponse = {
   error?: { message?: string };
 };
 
-// ── Browser Use agentic loop ─────────────────────────────────────────────────
+// ── Fireworks call ────────────────────────────────────────────────────────────
 
-async function browserUseCall(messages: BrowserUseMessage[]): Promise<{ content: string; toolCalls: BrowserUseToolCall[] }> {
-  if (!process.env.FIREWORKS_API_KEY) {
-    throw new Error('FIREWORKS_API_KEY is not configured.');
-  }
+async function browserUseCall(
+  messages: BrowserUseMessage[],
+): Promise<{ content: string; toolCalls: BrowserUseToolCall[] }> {
+  if (!process.env.FIREWORKS_API_KEY) throw new Error('FIREWORKS_API_KEY is not configured.');
 
   const res = await fetch(FIREWORKS_API_URL, {
     method: 'POST',
@@ -482,7 +683,7 @@ async function browserUseCall(messages: BrowserUseMessage[]): Promise<{ content:
     throw new Error(`Browser Use AI error (${res.status}): ${text}`);
   }
 
-  const json = await res.json() as FireworksNonStreamResponse;
+  const json = (await res.json()) as FireworksNonStreamResponse;
   if (json.error?.message) throw new Error(`Browser Use AI error: ${json.error.message}`);
 
   const msg = json.choices?.[0]?.message;
@@ -497,37 +698,44 @@ async function browserUseCall(messages: BrowserUseMessage[]): Promise<{ content:
 }
 
 function parseArgs(raw: string): Record<string, unknown> {
-  try { return JSON.parse(raw || '{}') as Record<string, unknown>; } catch { return {}; }
+  try {
+    return JSON.parse(raw || '{}') as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
-// ── Internal step label (human-readable label for each tool call) ─────────────
+// ── Step label ────────────────────────────────────────────────────────────────
 
 function internalStepLabel(name: string, args: Record<string, unknown>): string {
   const s = (k: string) => (typeof args[k] === 'string' ? (args[k] as string) : '');
   const trim = (v: string, max = 50) => (v.length > max ? `${v.slice(0, max)}…` : v);
-  const actions = Array.isArray(args.actions) ? args.actions as Array<{ type: string }> : [];
 
   switch (name) {
-    case 'browse': {
-      const url = s('url').replace(/^https?:\/\//, '');
-      if (actions.length > 0) {
-        const types = actions.map(a => a.type).join(', ');
-        return `Browsing ${trim(url, 35)} [${types}]`;
-      }
-      return `Browsing ${trim(url, 52)}`;
-    }
-    case 'screenshot': {
-      const url = s('url').replace(/^https?:\/\//, '');
-      return `Screenshotting ${trim(url, 45)}`;
-    }
+    case 'browser_navigate':
+      return `Navigating to ${trim(s('url').replace(/^https?:\/\//, ''), 48)}`;
+    case 'browser_snapshot':
+      return args.full ? 'Snapshotting page (full)' : 'Snapshotting page';
+    case 'browser_click':
+      return `Clicking ${s('ref')}`;
+    case 'browser_type':
+      return `Typing into ${s('ref')}`;
+    case 'browser_press':
+      return `Pressing ${s('key')}`;
+    case 'browser_scroll':
+      return `Scrolling ${s('direction')}`;
+    case 'browser_select':
+      return `Selecting "${trim(s('value'), 30)}" in ${s('ref')}`;
+    case 'browser_screenshot':
+      return 'Taking screenshot';
     case 'search_web':
-      return s('query') ? `Searching "${trim(s('query'), 45)}"` : 'Searching web';
+      return s('query') ? `Searching "${trim(s('query'), 40)}"` : 'Searching web';
     default:
       return name.replace(/_/g, ' ');
   }
 }
 
-// ── Step callback type ────────────────────────────────────────────────────────
+// ── Step callback ─────────────────────────────────────────────────────────────
 
 export type BrowserUseStepCallback = (
   event: 'start' | 'complete',
@@ -535,64 +743,100 @@ export type BrowserUseStepCallback = (
   error?: boolean,
 ) => void;
 
+// ── Main subagent loop ────────────────────────────────────────────────────────
+
 /**
  * Run the full browser use subagent loop for a browser automation task.
  * Called by the main AI via the `call_browser_use` tool.
- * @param task The browser task to complete.
- * @param onStep Optional callback fired as each internal tool call starts and completes.
+ *
+ * Uses a persistent Firecrawl CDP session + Playwright for stateful browser automation.
+ * Accessibility trees (not screenshots) drive all page understanding — no vision model needed.
  */
-export async function runBrowserUseSubagent(task: string, onStep?: BrowserUseStepCallback): Promise<string> {
+export async function runBrowserUseSubagent(
+  task: string,
+  onStep?: BrowserUseStepCallback,
+): Promise<string> {
+  const session = new BrowserSession();
+  let sessionOpened = false;
+
   const messages: BrowserUseMessage[] = [
     { role: 'system', content: BROWSER_USE_SYSTEM_PROMPT },
     { role: 'user', content: task },
   ];
 
-  for (let i = 0; i < BROWSER_USE_MAX_ITERATIONS; i++) {
-    const { content, toolCalls } = await browserUseCall(messages);
+  try {
+    for (let i = 0; i < BROWSER_USE_MAX_ITERATIONS; i++) {
+      const { content, toolCalls } = await browserUseCall(messages);
 
-    if (!toolCalls.length) {
-      return content || 'The browser use expert completed the task with no further output.';
-    }
-
-    messages.push({ role: 'assistant', content, tool_calls: toolCalls });
-
-    for (const toolCall of toolCalls) {
-      const args = parseArgs(toolCall.function.arguments);
-      const stepLabel = internalStepLabel(toolCall.function.name, args);
-      onStep?.('start', stepLabel);
-      let result: unknown;
-      try {
-        result = await runInternalTool(toolCall.function.name, args);
-        onStep?.('complete', stepLabel);
-      } catch (err) {
-        result = { error: (err as Error).message };
-        onStep?.('complete', stepLabel, true);
+      if (!toolCalls.length) {
+        return content || 'The browser use expert completed the task with no further output.';
       }
-      messages.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(result).slice(0, 30000),
-      });
-    }
-  }
 
-  const last = messages.at(-1);
-  if (last?.role === 'assistant') return (last as { role: 'assistant'; content: string }).content;
-  return 'Browser task complete — agent reached its iteration limit.';
+      // Add assistant message with tool calls
+      messages.push({ role: 'assistant', content, tool_calls: toolCalls });
+
+      // Execute all tool calls (usually sequential; AI rarely batches browser calls)
+      for (const tc of toolCalls) {
+        const args = parseArgs(tc.function.arguments);
+        const label = internalStepLabel(tc.function.name, args);
+
+        onStep?.('start', label);
+
+        // Open the CDP session on first browser tool call
+        if (!sessionOpened && tc.function.name.startsWith('browser_')) {
+          try {
+            await session.open();
+            sessionOpened = true;
+          } catch (err) {
+            const errMsg = `Failed to create Firecrawl browser session: ${(err as Error).message}. ` +
+              'Is FIRECRAWL_API_KEY configured?';
+            onStep?.('complete', label, true);
+            messages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify({ error: errMsg }) });
+            continue;
+          }
+        }
+
+        let toolResult: unknown;
+        let hadError = false;
+
+        try {
+          toolResult = await runInternalTool(tc.function.name, args, session);
+        } catch (err) {
+          toolResult = { error: (err as Error).message };
+          hadError = true;
+        }
+
+        onStep?.('complete', label, hadError);
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult, null, 2),
+        });
+      }
+    }
+
+    return 'Browser Use Expert reached the maximum iteration limit without completing the task.';
+  } finally {
+    await session.close();
+  }
 }
 
-// ── Gateway tool exposed to the main AI ──────────────────────────────────────
+// ── Exports for main route.ts ─────────────────────────────────────────────────
 
-/**
- * The single tool the main AI has access to.
- * Invoking it kicks off the full browser use subagent internally.
- */
 export const callBrowserUseToolDefinition = {
-  type: 'function',
+  type: 'function' as const,
   function: {
     name: 'call_browser_use',
     description:
-      'Dispatch a browser automation task to the Browser Use Expert subagent. The Browser Use Expert operates a real cloud-hosted browser (fully renders JavaScript/SPAs) and can navigate URLs, click elements, fill forms, scroll, wait for dynamic content, take screenshots, and extract data from any live website. Use whenever the task requires real browser interaction: checking live website states, filling out web forms, extracting data from JS-rendered pages, capturing screenshots of web UIs, automating multi-step web workflows, or verifying that a deployed web feature works correctly. Provide a clear, step-by-step task description including the starting URL and the specific interactions or data to extract. The expert handles all browsing internally and returns a structured report.',
+      'Delegate a browser automation task to the Browser Use Expert subagent. ' +
+      'The expert operates a real cloud-hosted browser via a persistent CDP session, ' +
+      'reads pages as accessibility trees (no vision needed), and can navigate, click, ' +
+      'fill forms, scroll, extract data, and take screenshots. ' +
+      'Returns a structured Markdown report of what was accomplished. ' +
+      'Use for: checking live sites, filling web forms, extracting JS-rendered content, ' +
+      'verifying deployed features, multi-step web workflows. ' +
+      'Do NOT use for static documentation research — use call_librarian instead.',
     parameters: {
       type: 'object',
       required: ['task'],
@@ -600,7 +844,9 @@ export const callBrowserUseToolDefinition = {
         task: {
           type: 'string',
           description:
-            'A clear, specific browser task description including: (1) the starting URL or a description of what to find, (2) any interactions to perform (clicks, form fills, navigation steps), (3) what data to extract or what outcome to confirm. Example: "Go to https://example.com/login, fill the email field (#email) with test@example.com and the password field (#password) with testpass, click the submit button, then return the content of the resulting page and a screenshot."',
+            'Detailed description of the browser task to complete. Include: ' +
+            'the starting URL (or keywords to search for it), what actions to perform, ' +
+            'what data to extract, and what the expected outcome is.',
         },
       },
       additionalProperties: false,

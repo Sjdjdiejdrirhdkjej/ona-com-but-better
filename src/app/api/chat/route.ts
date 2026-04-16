@@ -119,7 +119,9 @@ Tell the user: "Connect your GitHub account using the button above to let me acc
 
 **Do NOT use for:** documentation research (use librarian), anything accessible via the GitHub API.
 
-**Example:** \`call_browser_use({ task: "Go to https://example.com, click the Login button, fill #email with test@test.com and #password with pass123, submit the form, and return the resulting page content and a screenshot." })\`
+**How it works:** The expert runs a persistent cloud browser via Playwright over CDP (no vision model needed — pages are read as accessibility trees with interactive element ref IDs like @e1, @e2). It can navigate, click, type, scroll, press keys, select dropdowns, and take screenshots all within the same stateful session — enabling login flows, multi-step forms, and SPA navigation.
+
+**Example:** \`call_browser_use({ task: "Go to https://example.com/login, fill the email field with test@test.com and the password field with pass123, submit the form, then return what page appears and take a screenshot." })\`
 
 ---
 
