@@ -370,6 +370,7 @@ type ToolCall = {
 
 type FireworksDelta = {
   content?: string | null;
+  reasoning_content?: string | null;
   tool_calls?: Array<{
     index: number;
     id?: string;
@@ -453,6 +454,7 @@ async function streamFireworksCall(
   let buffer = '';
   let content = '';
   let finishReason: FinishReason = null;
+  let inThinkBlock = false;
   const toolCallsMap = new Map<number, { id: string; type: 'function'; function: { name: string; arguments: string } }>();
 
   try {
@@ -477,7 +479,22 @@ async function streamFireworksCall(
             finishReason = choice.finish_reason as FinishReason;
           }
 
+          if (delta.reasoning_content) {
+            if (!inThinkBlock) {
+              content += '<think>';
+              onDelta('<think>');
+              inThinkBlock = true;
+            }
+            content += delta.reasoning_content;
+            onDelta(delta.reasoning_content);
+          }
+
           if (delta.content) {
+            if (inThinkBlock) {
+              content += '</think>';
+              onDelta('</think>');
+              inThinkBlock = false;
+            }
             content += delta.content;
             onDelta(delta.content);
           }
@@ -498,6 +515,10 @@ async function streamFireworksCall(
       }
     }
   } finally {
+    if (inThinkBlock) {
+      content += '</think>';
+      onDelta('</think>');
+    }
     reader.releaseLock();
   }
 
@@ -597,7 +618,7 @@ export async function POST(req: NextRequest) {
 
         let text = '';
         await streamFireworksCall(
-          { messages: conversation, max_tokens: 8192, temperature: 0.45 },
+          { messages: conversation, max_tokens: 8192, temperature: 0.45, reasoning_effort: 'high' },
           (delta) => {
             emit({ delta });
             text += delta;
@@ -627,6 +648,7 @@ export async function POST(req: NextRequest) {
             tool_choice: 'auto',
             max_tokens: 16384,
             temperature: 0.15,
+            reasoning_effort: 'high',
           },
           (delta) => {
             emit({ delta });
