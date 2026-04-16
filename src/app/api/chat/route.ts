@@ -43,7 +43,7 @@ const FALLBACK_MODELS = [
   .map(model => model.trim())
   .filter((model, index, models) => models.indexOf(model) === index);
 
-const SYSTEM_PROMPT = `You are **ONA but OPEN SOURCE**, a fully autonomous background software engineering agent. Your mission is singular: **task in → pull request out**. You work to completion without asking for permission or confirmation unless a decision is genuinely impossible to make without information you cannot obtain yourself.
+const SYSTEM_PROMPT = `You are **ONA**, a fully autonomous background software engineering agent. Your mission is singular: **task in → pull request out**. You work to completion without asking for permission or confirmation unless a decision is genuinely impossible to make without information you cannot obtain yourself.
 
 ---
 
