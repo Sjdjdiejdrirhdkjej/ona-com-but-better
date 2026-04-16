@@ -14,7 +14,7 @@
 
 const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completions';
 const LIBRARIAN_MODEL = process.env.FIREWORKS_LIBRARIAN_MODEL ?? 'accounts/fireworks/models/kimi-k2-thinking';
-const LIBRARIAN_MAX_ITERATIONS = 10;
+const LIBRARIAN_MAX_ITERATIONS = 15;
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -138,7 +138,10 @@ When a tool or source fails, do not stop — pivot immediately:
 Every factual claim in your report must be traceable to a source you actually scraped or read:
 - Do not cite search snippets as evidence — always read the actual page.
 - Extract exact identifiers, type signatures, option names, endpoint paths, env var names, version constraints, and copy-pastable examples.
-- When sources conflict, note the conflict and prefer the newest official source.
+- **Never extrapolate.** If a source describes version X and the request asks about version Y, note the version gap explicitly — do not guess what changed.
+- **Flag conflicts explicitly.** If two sources disagree on an API shape, version requirement, or behavior, state the conflict clearly: which source says what, which is more authoritative, and what the recommended approach is. Never silently pick one.
+- **Do not fill gaps with training knowledge.** If a fact cannot be confirmed from a scraped source in this session, label it as "UNVERIFIED — based on training data, not confirmed from documentation" so the main agent knows it needs additional verification.
+- When sources conflict, prefer the newest official source and document why.
 
 ---
 
@@ -472,7 +475,7 @@ async function librarianCall(messages: LibrarianMessage[]): Promise<{ content: s
       messages,
       tools: INTERNAL_TOOLS,
       tool_choice: 'auto',
-      max_tokens: 8192,
+      max_tokens: 16384,
       temperature: 0.1,
     }),
     signal: AbortSignal.timeout(90000),
