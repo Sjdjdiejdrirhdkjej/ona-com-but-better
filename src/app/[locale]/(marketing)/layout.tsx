@@ -1,6 +1,5 @@
 import { setRequestLocale } from 'next-intl/server';
 import Link from 'next/link';
-import { NavPromptBox } from '@/components/NavPromptBox';
 import { BaseTemplate } from '@/templates/BaseTemplate';
 
 export default async function Layout(props: {
@@ -48,7 +47,6 @@ export default async function Layout(props: {
       )}
       rightNav={(
         <>
-          <NavPromptBox />
           <Link
             href="/app/"
             className="rounded-md border border-gray-900 px-3 py-1.5 text-gray-900 transition-colors hover:bg-gray-900 hover:text-white"

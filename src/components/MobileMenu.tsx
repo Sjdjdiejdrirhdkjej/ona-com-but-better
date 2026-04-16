@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 const navLinks = [
   { label: 'Platform', href: '/about/' },
@@ -14,16 +14,6 @@ const navLinks = [
 
 export function MobileMenu() {
   const [open, setOpen] = useState(false);
-  const [prompt, setPrompt] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!prompt.trim()) return;
-    setPrompt('');
-    inputRef.current?.blur();
-    setOpen(false);
-  }
 
   return (
     <div className="md:hidden">
@@ -67,29 +57,6 @@ export function MobileMenu() {
             </ul>
 
             <div className="mt-4 flex flex-col gap-2 border-t border-gray-200 dark:border-gray-800 pt-4">
-              <form onSubmit={handleSubmit} className="relative flex items-center">
-                <input
-                  suppressHydrationWarning
-                  ref={inputRef}
-                  type="text"
-                  value={prompt}
-                  onChange={e => setPrompt(e.target.value)}
-                  placeholder="Ask anything…"
-                  className="h-10 w-full rounded-full border border-gray-300 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 pl-4 pr-11 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-gray-400 focus:bg-white dark:focus:bg-gray-700 focus:shadow-sm"
-                />
-                <button
-                  suppressHydrationWarning
-                  type="submit"
-                  aria-label="Send"
-                  disabled={!prompt.trim()}
-                  className="absolute right-2 flex size-6 items-center justify-center rounded-full bg-gray-900 dark:bg-gray-100 dark:text-gray-900 text-white transition-opacity hover:opacity-80 disabled:opacity-30"
-                >
-                  <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
-                    <path d="M5 8.5V1.5M5 1.5L2 4.5M5 1.5L8 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              </form>
-
               <Link
                 href="/app/"
                 onClick={() => setOpen(false)}
