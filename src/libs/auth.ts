@@ -12,12 +12,21 @@ const isLocal = databaseUrl
   ? databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1')
   : true;
 
+const replitDomain = process.env.REPLIT_DEV_DOMAIN
+  ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+  : undefined;
+
+const appUrl
+  = process.env.BETTER_AUTH_URL
+  ?? process.env.NEXT_PUBLIC_APP_URL
+  ?? replitDomain;
+
 export const auth = betterAuth({
   database: new Pool({
     connectionString: databaseUrl,
     ssl: !isLocal ? true : undefined,
   }),
-  baseURL: process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL,
+  baseURL: appUrl,
   secret: process.env.BETTER_AUTH_SECRET,
   socialProviders: {
     github: {
@@ -26,7 +35,7 @@ export const auth = betterAuth({
     },
   },
   trustedOrigins: [
-    process.env.BETTER_AUTH_URL ?? '',
+    appUrl ?? '',
     process.env.NEXT_PUBLIC_APP_URL ?? '',
   ].filter(Boolean),
 });

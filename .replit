@@ -42,7 +42,6 @@ NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL = "/app/"
 NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL = "/app/"
 
 [userenv.development]
-BETTER_AUTH_URL = "http://localhost:5000"
 BETTER_AUTH_SECRET = "DlJtemODYEl5cmCFmNonObmj1/rO82pSpLQq9vsPTbo="
 
 [deployment]
