@@ -952,7 +952,8 @@ export default function AppPage() {
       imagePreview: imageDataUrl,
     };
 
-    const currentConv = conversations.find(c => c.id === activeId)!;
+    const currentConv = conversations.find(c => c.id === activeId);
+    if (!currentConv) return;
     const isFirstMessage = currentConv.messages.length === 0;
     const title = trimmed
       ? (trimmed.length > 42 ? `${trimmed.slice(0, 42)}…` : trimmed)
