@@ -6,7 +6,7 @@ import { routing } from './libs/I18nRouting';
 const handleI18nRouting = createIntlMiddleware(routing);
 
 const isProtectedRoute = createRouteMatcher([
-  '/*/dashboard(.*)',
+  '/:locale/dashboard(.*)',
   '/dashboard(.*)',
 ]);
 
