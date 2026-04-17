@@ -16,17 +16,8 @@ const baseConfig: NextConfig = {
     '*.repl.co',
     ...(process.env.REPLIT_DEV_DOMAIN ? [process.env.REPLIT_DEV_DOMAIN] : []),
   ],
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'posthog.com',
-      },
-    ],
-  },
   poweredByHeader: false,
   reactStrictMode: true,
-  serverExternalPackages: ['@electric-sql/pglite'],
 };
 
 const nextIntlConfig = createNextIntlPlugin('./src/libs/I18n.ts')(baseConfig);
