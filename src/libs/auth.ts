@@ -18,8 +18,8 @@ const replitDomain = process.env.REPLIT_DEV_DOMAIN
 
 const appUrl
   = process.env.BETTER_AUTH_URL
-  ?? process.env.NEXT_PUBLIC_APP_URL
-  ?? replitDomain;
+  || process.env.NEXT_PUBLIC_APP_URL
+  || replitDomain;
 
 export const auth = betterAuth({
   database: new Pool({
