@@ -9,7 +9,7 @@ An open-source platform for AI background software engineering agents. The landi
 - **ORM**: Drizzle ORM
 - **Styling**: Tailwind CSS v4
 - **i18n**: next-intl with `[locale]` routing, locales en/fr, `as-needed` prefix (so `/app` works without prefix)
-- **AI**: Fireworks AI — ONA Max uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`); ONA Max Fast uses Kimi K2.5 Turbo (`accounts/fireworks/routers/kimi-k2p5-turbo`); ONA Mini uses Qwen3 8B (`accounts/fireworks/models/qwen3-8b`); the Librarian research subagent uses Kimi K2 Thinking (`accounts/fireworks/models/kimi-k2-thinking`); the Browser Use Expert subagent uses Kimi K2 Instruct 0905 (`accounts/fireworks/models/kimi-k2-instruct-0905`) — all overridable via env vars
+- **AI**: Fireworks AI — ONA Max uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`); ONA Max Fast uses Kimi K2.5 Turbo (`accounts/fireworks/routers/kimi-k2p5-turbo`); ONA Mini uses Qwen3 30B A3B Instruct (`accounts/fireworks/models/qwen3-30b-a3b-instruct-2507`); the Librarian research subagent uses Kimi K2 Thinking (`accounts/fireworks/models/kimi-k2-thinking`); the Browser Use Expert subagent uses Kimi K2 Instruct 0905 (`accounts/fireworks/models/kimi-k2-instruct-0905`) — all overridable via env vars
 - **GitHub delivery policy**: repository changes default to branch + pull request; direct writes to the repository default branch are blocked unless the user explicitly asks for a direct push.
 - **Package manager**: npm (with `legacy-peer-deps=true` in `.npmrc`)
 
