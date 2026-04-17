@@ -7,18 +7,16 @@ import { routing } from './libs/I18nRouting';
 const handleI18nRouting = createIntlMiddleware(routing);
 
 const isProtectedRoute = (pathname: string) =>
-  /\/(en|fr)?\/?(dashboard)(\/|$)/.test(pathname)
-  || pathname === '/dashboard'
-  || pathname.startsWith('/dashboard/');
+  /\/(en|fr)?\/?(app)(\/|$)/.test(pathname)
+  || pathname === '/app'
+  || pathname.startsWith('/app/');
 
 export default async function middleware(req: NextRequest) {
   if (isProtectedRoute(req.nextUrl.pathname)) {
-    const sessionToken
-      = req.cookies.get('next-auth.session-token')
-      ?? req.cookies.get('__Secure-next-auth.session-token');
+    const sessionCookie = req.cookies.get('replit_session');
 
-    if (!sessionToken) {
-      return NextResponse.redirect(new URL('/sign-in', req.url));
+    if (!sessionCookie) {
+      return NextResponse.redirect(new URL('/api/login', req.url));
     }
   }
 

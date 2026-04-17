@@ -3,8 +3,6 @@ import { z } from 'zod/v4';
 
 export const Env = createEnv({
   server: {
-    BETTER_AUTH_SECRET: z.string().optional(),
-    BETTER_AUTH_URL: z.string().url().optional(),
     DATABASE_URL: z.string().optional(),
     DAYTONA_API_KEY: z.string().optional(),
     FIRECRAWL_API_KEY: z.string().optional(),
@@ -15,12 +13,12 @@ export const Env = createEnv({
     FIREWORKS_FALLBACK_MODELS: z.string().optional(),
     FIREWORKS_LIBRARIAN_MODEL: z.string().optional(),
     FIREWORKS_MODEL: z.string().optional(),
-    GITHUB_CLIENT_ID: z.string().optional(),
-    GITHUB_CLIENT_SECRET: z.string().optional(),
     POSTGRES_DATABASE_URL: z.string().optional(),
     POSTGRES_PRISMA_URL: z.string().optional(),
     POSTGRES_URL: z.string().optional(),
     POSTGRES_URL_NON_POOLING: z.string().optional(),
+    REPL_ID: z.string().optional(),
+    SESSION_SECRET: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().optional(),
@@ -31,8 +29,6 @@ export const Env = createEnv({
     NODE_ENV: z.enum(['test', 'development', 'production']).optional(),
   },
   runtimeEnv: {
-    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
-    BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
     DATABASE_URL: process.env.DATABASE_URL,
     DAYTONA_API_KEY: process.env.DAYTONA_API_KEY,
     FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
@@ -43,8 +39,6 @@ export const Env = createEnv({
     FIREWORKS_FALLBACK_MODELS: process.env.FIREWORKS_FALLBACK_MODELS,
     FIREWORKS_LIBRARIAN_MODEL: process.env.FIREWORKS_LIBRARIAN_MODEL,
     FIREWORKS_MODEL: process.env.FIREWORKS_MODEL,
-    GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
-    GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
@@ -53,6 +47,8 @@ export const Env = createEnv({
     POSTGRES_PRISMA_URL: process.env.POSTGRES_PRISMA_URL,
     POSTGRES_URL: process.env.POSTGRES_URL,
     POSTGRES_URL_NON_POOLING: process.env.POSTGRES_URL_NON_POOLING,
+    REPL_ID: process.env.REPL_ID,
+    SESSION_SECRET: process.env.SESSION_SECRET,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

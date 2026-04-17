@@ -1,21 +1,17 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { signOut, useSession } from '@/libs/auth-client';
+import { signOut, useAuth } from '@/libs/auth-client';
 
 export function UserDropdown() {
-  const { data: session } = useSession();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const user = session?.user;
   if (!user) return null;
 
-  const initial = (user.name ?? user.email ?? 'U')[0]?.toUpperCase() ?? 'U';
-
-  async function handleSignOut() {
-    await signOut({ callbackUrl: '/' });
-  }
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email;
+  const initial = (name ?? 'U')[0]?.toUpperCase() ?? 'U';
 
   return (
     <>
@@ -33,11 +29,11 @@ export function UserDropdown() {
           className="flex items-center gap-2 rounded-lg border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/5 px-2.5 py-1.5 text-sm text-gray-700 dark:text-gray-300 transition-colors hover:bg-black/6 dark:hover:bg-white/8"
           aria-label="User menu"
         >
-          {user.image
+          {user.profileImageUrl
             ? (
                 <img
-                  src={user.image}
-                  alt={user.name ?? ''}
+                  src={user.profileImageUrl}
+                  alt={name ?? ''}
                   className="size-6 rounded-full"
                 />
               )
@@ -49,7 +45,7 @@ export function UserDropdown() {
                   {initial}
                 </div>
               )}
-          <span className="hidden max-w-[120px] truncate sm:block">{user.name ?? user.email}</span>
+          <span className="hidden max-w-[120px] truncate sm:block">{name}</span>
           <svg
             width="12"
             height="12"
@@ -68,13 +64,13 @@ export function UserDropdown() {
             style={{ backgroundColor: 'var(--bg)' }}
           >
             <div className="border-b border-black/8 dark:border-white/8 px-3.5 py-2.5">
-              <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">{user.name}</p>
+              <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">{name}</p>
               <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
             </div>
             <div className="p-1">
               <button
                 type="button"
-                onClick={handleSignOut}
+                onClick={signOut}
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 dark:text-gray-400 transition-colors hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100"
               >
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">

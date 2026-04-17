@@ -29,7 +29,7 @@ export default async function SignInPage(props: ISignInPageProps) {
         Sign in to ONA
       </h1>
       <p style={{ color: '#666', marginBottom: '32px', fontSize: '15px' }}>
-        Use your GitHub account to continue.
+        Use your Replit account to continue.
       </p>
       <SignInButton />
     </div>
