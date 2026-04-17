@@ -562,6 +562,8 @@ export default function AppPage() {
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const [atMention, setAtMention] = useState<{ query: string; caretPos: number } | null>(null);
   const [sandboxFiles, setSandboxFiles] = useState<string[]>([]);
   const [atMentionIndex, setAtMentionIndex] = useState(0);
@@ -581,6 +583,7 @@ export default function AppPage() {
   const sandboxFilesCacheRef = useRef<Map<string, string[]>>(new Map());
   const sessionIdRef = useRef<string>('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize a per-tab session ID from sessionStorage so concurrent tabs are isolated
   useEffect(() => {
@@ -1008,6 +1011,37 @@ export default function AppPage() {
       }
       return next;
     });
+  }
+
+  function startRenaming(id: string, currentTitle: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setRenamingId(id);
+    setRenameValue(currentTitle);
+    setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 0);
+  }
+
+  async function commitRename(id: string) {
+    const trimmed = renameValue.trim();
+    setRenamingId(null);
+    if (!trimmed) return;
+    const conv = conversations.find(c => c.id === id);
+    if (!conv || trimmed === conv.title) return;
+    setConversations(prev => prev.map(c => c.id === id ? { ...c, title: trimmed } : c));
+    try {
+      await fetch(`/api/conversations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmed }),
+      });
+    } catch {}
+  }
+
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameValue('');
   }
 
   const send = useCallback(async (text: string, imageDataUrl?: string) => {
@@ -1695,30 +1729,51 @@ export default function AppPage() {
                     }`}
                   >
                     <button
-                      onClick={() => { setActiveId(c.id); closeSidebarOnMobile(); }}
+                      onClick={() => { if (renamingId !== c.id) { setActiveId(c.id); closeSidebarOnMobile(); } }}
+                      onDoubleClick={e => syncedIds.current.has(c.id) && startRenaming(c.id, c.title, e)}
                       className="min-w-0 flex-1 px-3 py-3 text-left"
                       aria-label={`Switch to task: ${c.title}`}
                     >
                       <div className="flex items-center gap-1.5">
-                        <p className="truncate text-sm font-medium leading-tight">
-                          <HighlightText text={c.title} query={q} />
-                        </p>
-                        {c.activeJobId && (
+                        {renamingId === c.id
+                          ? (
+                              <input
+                                ref={renameInputRef}
+                                value={renameValue}
+                                onChange={e => setRenameValue(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') { e.preventDefault(); commitRename(c.id); }
+                                  if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                                }}
+                                onBlur={() => commitRename(c.id)}
+                                onClick={e => e.stopPropagation()}
+                                className="w-full truncate rounded bg-white dark:bg-gray-800 border border-indigo-400 dark:border-indigo-500 px-1 py-0.5 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none ring-2 ring-indigo-300/50 dark:ring-indigo-600/40"
+                                aria-label="Rename conversation"
+                              />
+                            )
+                          : (
+                              <p className="truncate text-sm font-medium leading-tight">
+                                <HighlightText text={c.title} query={q} />
+                              </p>
+                            )}
+                        {!renamingId && c.activeJobId && (
                           <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="shrink-0 text-indigo-400" style={{ animation: 'ona-spin 1s linear infinite' }}>
                             <circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
                             <path d="M4 1A3 3 0 017 4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
                           </svg>
                         )}
                       </div>
-                      {showSnippet
-                        ? (
-                            <p className="mt-0.5 line-clamp-2 text-xs text-gray-400 dark:text-gray-500 leading-snug">
-                              <HighlightText text={snippet} query={q} />
-                            </p>
-                          )
-                        : (
-                            <p suppressHydrationWarning className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{relativeTime(c.createdAt)}</p>
-                          )}
+                      {renamingId !== c.id && (
+                        showSnippet
+                          ? (
+                              <p className="mt-0.5 line-clamp-2 text-xs text-gray-400 dark:text-gray-500 leading-snug">
+                                <HighlightText text={snippet} query={q} />
+                              </p>
+                            )
+                          : (
+                              <p suppressHydrationWarning className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{relativeTime(c.createdAt)}</p>
+                            )
+                      )}
                     </button>
                     <button
                       onClick={e => deleteConversation(c.id, e)}
