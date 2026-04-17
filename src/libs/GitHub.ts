@@ -4,6 +4,9 @@ import { execFile } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { eq } from 'drizzle-orm';
+import { db } from './DB';
+import { userGithubTokensSchema } from '@/models/Schema';
 import type { AppSession } from './session';
 import { sessionOptions } from './session';
 
@@ -22,12 +25,32 @@ export function isGitHubConfigured() {
   return Boolean(process.env.GITHUB_CLIENT_ID);
 }
 
-// Reads the GitHub access token stored in the iron-session after device flow.
+// Reads the GitHub access token — checks the session first, then falls back to
+// the database so the token survives across logins and account switches.
 export async function getGitHubToken(): Promise<string | undefined> {
   try {
     const cookieStore = await cookies();
     const session = await getIronSession<AppSession>(cookieStore, sessionOptions);
-    return session.githubToken;
+
+    if (session.githubToken) {
+      return session.githubToken;
+    }
+
+    if (session.user?.id) {
+      const row = await db
+        .select()
+        .from(userGithubTokensSchema)
+        .where(eq(userGithubTokensSchema.userId, session.user.id))
+        .limit(1);
+
+      if (row[0]?.githubToken) {
+        session.githubToken = row[0].githubToken;
+        await session.save();
+        return row[0].githubToken;
+      }
+    }
+
+    return undefined;
   } catch {
     return undefined;
   }
