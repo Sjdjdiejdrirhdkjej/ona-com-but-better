@@ -512,6 +512,43 @@ function newConversation(): Conversation {
   return { id: crypto.randomUUID(), title: 'New task', messages: [], createdAt: Date.now() };
 }
 
+function HighlightText({ text, query }: { text: string; query: string }) {
+  if (!query) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="rounded bg-yellow-200 dark:bg-yellow-500/40 text-yellow-900 dark:text-yellow-200 px-0 not-italic font-semibold">
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
+function getMatchSnippet(conv: Conversation, query: string): string | null {
+  if (!query) return null;
+  const q = query.toLowerCase();
+  for (const m of conv.messages) {
+    const raw = typeof m.content === 'string'
+      ? m.content
+      : Array.isArray(m.content)
+        ? (m.content as { type?: string; text?: string }[])
+            .filter(p => p.type === 'text')
+            .map(p => p.text ?? '')
+            .join(' ')
+        : '';
+    const lower = raw.toLowerCase();
+    const idx = lower.indexOf(q);
+    if (idx === -1) continue;
+    const start = Math.max(0, idx - 30);
+    const end = Math.min(raw.length, idx + query.length + 50);
+    return (start > 0 ? '…' : '') + raw.slice(start, end) + (end < raw.length ? '…' : '');
+  }
+  return null;
+}
+
 export default function AppPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>('');
@@ -543,6 +580,7 @@ export default function AppPage() {
   const syncedIds = useRef<Set<string>>(new Set());
   const sandboxFilesCacheRef = useRef<Map<string, string[]>>(new Map());
   const sessionIdRef = useRef<string>('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize a per-tab session ID from sessionStorage so concurrent tabs are isolated
   useEffect(() => {
@@ -553,6 +591,19 @@ export default function AppPage() {
     }
     sessionIdRef.current = sid;
   }, []);
+
+  // Cmd/Ctrl+K → focus search
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        if (!sidebarOpen) setSidebarOpen(true);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [sidebarOpen]);
 
   // Load conversation history from DB on mount
   useEffect(() => {
@@ -1579,23 +1630,30 @@ export default function AppPage() {
             <path d="M9 9l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
           </svg>
           <input
+            ref={searchInputRef}
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search tasks…"
-            className="w-full rounded-lg border border-black/8 dark:border-white/8 bg-white/60 dark:bg-white/5 py-1.5 pl-7 pr-3 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-gray-300 dark:focus:border-gray-600 focus:bg-white dark:focus:bg-white/8 transition-colors"
+            className="w-full rounded-lg border border-black/8 dark:border-white/8 bg-white/60 dark:bg-white/5 py-1.5 pl-7 pr-12 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-gray-300 dark:focus:border-gray-600 focus:bg-white dark:focus:bg-white/8 transition-colors"
           />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-              aria-label="Clear search"
-            >
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                <path d="M1 1l9 9M10 1L1 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-            </button>
-          )}
+          {search
+            ? (
+                <button
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="Clear search"
+                >
+                  <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                    <path d="M1 1l9 9M10 1L1 10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )
+            : (
+                <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-0.5 rounded border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-1 py-0.5 font-mono text-[9px] text-gray-400 dark:text-gray-500 leading-none select-none">
+                  ⌘K
+                </kbd>
+              )}
         </div>
       </div>
 
@@ -1623,43 +1681,58 @@ export default function AppPage() {
                   </div>
                 );
               }
-              return filtered.map(c => (
-                <div
-                  key={c.id}
-                  className={`group flex w-full items-stretch overflow-hidden rounded-xl text-left transition-colors ${
-                    c.id === activeId
-                      ? 'bg-black/8 dark:bg-white/10 text-gray-900 dark:text-gray-100'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/8 dark:active:bg-white/10'
-                  }`}
-                >
-                  <button
-                    onClick={() => { setActiveId(c.id); closeSidebarOnMobile(); }}
-                    className="min-w-0 flex-1 px-3 py-3 text-left"
-                    aria-label={`Switch to task: ${c.title}`}
+              return filtered.map((c) => {
+                const snippet = q ? getMatchSnippet(c, q) : null;
+                const titleMatchesQuery = q ? c.title.toLowerCase().includes(q) : false;
+                const showSnippet = snippet && !titleMatchesQuery;
+                return (
+                  <div
+                    key={c.id}
+                    className={`group flex w-full items-stretch overflow-hidden rounded-xl text-left transition-colors ${
+                      c.id === activeId
+                        ? 'bg-black/8 dark:bg-white/10 text-gray-900 dark:text-gray-100'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/8 dark:active:bg-white/10'
+                    }`}
                   >
-                    <div className="flex items-center gap-1.5">
-                      <p className="truncate text-sm font-medium leading-tight">{c.title}</p>
-                      {c.activeJobId && (
-                        <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="shrink-0 text-indigo-400" style={{ animation: 'ona-spin 1s linear infinite' }}>
-                          <circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
-                          <path d="M4 1A3 3 0 017 4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-                        </svg>
-                      )}
-                    </div>
-                    <p suppressHydrationWarning className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{relativeTime(c.createdAt)}</p>
-                  </button>
-                  <button
-                    onClick={e => deleteConversation(c.id, e)}
-                    className="delete-btn flex w-11 shrink-0 items-center justify-center border-l border-black/5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-inset dark:border-white/8 dark:text-gray-500 dark:hover:bg-red-500/10 dark:hover:text-red-300"
-                    aria-label="Delete task"
-                    title="Delete task"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
-                      <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                </div>
-              ));
+                    <button
+                      onClick={() => { setActiveId(c.id); closeSidebarOnMobile(); }}
+                      className="min-w-0 flex-1 px-3 py-3 text-left"
+                      aria-label={`Switch to task: ${c.title}`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate text-sm font-medium leading-tight">
+                          <HighlightText text={c.title} query={q} />
+                        </p>
+                        {c.activeJobId && (
+                          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className="shrink-0 text-indigo-400" style={{ animation: 'ona-spin 1s linear infinite' }}>
+                            <circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+                            <path d="M4 1A3 3 0 017 4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+                          </svg>
+                        )}
+                      </div>
+                      {showSnippet
+                        ? (
+                            <p className="mt-0.5 line-clamp-2 text-xs text-gray-400 dark:text-gray-500 leading-snug">
+                              <HighlightText text={snippet} query={q} />
+                            </p>
+                          )
+                        : (
+                            <p suppressHydrationWarning className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{relativeTime(c.createdAt)}</p>
+                          )}
+                    </button>
+                    <button
+                      onClick={e => deleteConversation(c.id, e)}
+                      className="delete-btn flex w-11 shrink-0 items-center justify-center border-l border-black/5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-inset dark:border-white/8 dark:text-gray-500 dark:hover:bg-red-500/10 dark:hover:text-red-300"
+                      aria-label="Delete task"
+                      title="Delete task"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 12 12" fill="none">
+                        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              });
             })()}
       </div>
 
