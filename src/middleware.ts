@@ -12,9 +12,15 @@ const isProtectedRoute = (pathname: string) =>
   || pathname.startsWith('/app/');
 
 export default async function middleware(req: NextRequest) {
-  if (isProtectedRoute(req.nextUrl.pathname)) {
-    const sessionCookie = req.cookies.get('replit_session');
+  const { pathname } = req.nextUrl;
 
+  // Skip middleware entirely for API routes
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.next();
+  }
+
+  if (isProtectedRoute(pathname)) {
+    const sessionCookie = req.cookies.get('replit_session');
     if (!sessionCookie) {
       return NextResponse.redirect(new URL('/api/login', req.url));
     }
@@ -26,6 +32,5 @@ export default async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     '/((?!_next|_vercel|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    '/(api|trpc)(.*)',
   ],
 };
