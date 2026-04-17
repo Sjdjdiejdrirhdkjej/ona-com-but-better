@@ -8,10 +8,7 @@ export function SignInButton() {
 
   const handleSignIn = async () => {
     setLoading(true);
-    await signIn.social({
-      provider: 'github',
-      callbackURL: '/app',
-    });
+    await signIn('github', { callbackUrl: '/app' });
   };
 
   return (

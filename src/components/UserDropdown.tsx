@@ -1,11 +1,10 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { signOut } from '@/libs/auth-client';
-import { useServerSession } from '@/components/SessionProvider';
+import { signOut, useSession } from '@/libs/auth-client';
 
 export function UserDropdown() {
-  const session = useServerSession();
+  const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -14,14 +13,8 @@ export function UserDropdown() {
 
   const initial = (user.name ?? user.email ?? 'U')[0]?.toUpperCase() ?? 'U';
 
-  function handleClickOutside(e: React.MouseEvent) {
-    if (ref.current && !ref.current.contains(e.target as Node)) {
-      setOpen(false);
-    }
-  }
-
   async function handleSignOut() {
-    await signOut({ fetchOptions: { onSuccess: () => { window.location.href = '/'; } } });
+    await signOut({ callbackUrl: '/' });
   }
 
   return (

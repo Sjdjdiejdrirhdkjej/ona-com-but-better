@@ -14,8 +14,8 @@ const isProtectedRoute = (pathname: string) =>
 export default async function middleware(req: NextRequest) {
   if (isProtectedRoute(req.nextUrl.pathname)) {
     const sessionToken
-      = req.cookies.get('better-auth.session_token')
-      ?? req.cookies.get('__Secure-better-auth.session_token');
+      = req.cookies.get('next-auth.session-token')
+      ?? req.cookies.get('__Secure-next-auth.session-token');
 
     if (!sessionToken) {
       return NextResponse.redirect(new URL('/sign-in', req.url));
