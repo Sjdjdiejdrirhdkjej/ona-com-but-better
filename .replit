@@ -44,6 +44,9 @@ NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL = "/app/"
 [userenv.development]
 BETTER_AUTH_SECRET = "DlJtemODYEl5cmCFmNonObmj1/rO82pSpLQq9vsPTbo="
 
+[userenv.production]
+NEXTAUTH_URL = "https://ona-com-open-source--j88905251.replit.app"
+
 [deployment]
 deploymentTarget = "autoscale"
 run = ["npm", "run", "start"]
