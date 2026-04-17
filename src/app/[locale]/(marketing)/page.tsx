@@ -73,8 +73,7 @@ export default async function Index(props: IIndexProps) {
             style={{
               top: '5%', left: '10%', width: '45%', height: '65%',
               borderRadius: '50%',
-              background: 'radial-gradient(circle,rgba(100,140,210,0.6) 0%,transparent 70%)',
-              filter: 'blur(40px)',
+              background: 'radial-gradient(circle,rgba(100,140,210,0.45) 0%,rgba(100,140,210,0.1) 55%,transparent 70%)',
             }}
           />
           <div
@@ -82,8 +81,7 @@ export default async function Index(props: IIndexProps) {
             style={{
               top: '15%', right: '5%', width: '40%', height: '55%',
               borderRadius: '50%',
-              background: 'radial-gradient(circle,rgba(200,145,110,0.5) 0%,transparent 70%)',
-              filter: 'blur(35px)',
+              background: 'radial-gradient(circle,rgba(200,145,110,0.4) 0%,rgba(200,145,110,0.08) 55%,transparent 70%)',
             }}
           />
           <div
@@ -91,8 +89,7 @@ export default async function Index(props: IIndexProps) {
             style={{
               bottom: '5%', left: '28%', width: '35%', height: '45%',
               borderRadius: '50%',
-              background: 'radial-gradient(circle,rgba(150,120,195,0.45) 0%,transparent 70%)',
-              filter: 'blur(30px)',
+              background: 'radial-gradient(circle,rgba(150,120,195,0.35) 0%,rgba(150,120,195,0.07) 55%,transparent 70%)',
             }}
           />
 
@@ -105,7 +102,7 @@ export default async function Index(props: IIndexProps) {
               <div
                 key={item.label}
                 className="flex items-start gap-3 rounded-xl px-3 py-2.5 sm:px-4 sm:py-3"
-                style={{ backgroundColor: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)' }}
+                style={{ backgroundColor: 'rgba(255,255,255,0.95)' }}
               >
                 <span
                   className="mt-1.5 size-2 flex-shrink-0 rounded-full"
