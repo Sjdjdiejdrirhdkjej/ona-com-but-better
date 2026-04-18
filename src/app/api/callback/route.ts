@@ -1,10 +1,16 @@
 import * as client from 'openid-client';
+import { eq } from 'drizzle-orm';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
+import { db } from '@/libs/DB';
 import type { AppSession } from '@/libs/session';
 import { sessionOptions } from '@/libs/session';
+import { userCreditsSchema } from '@/models/Schema';
+
+const STARTER_CREDITS = 1000;
+const DAILY_CREDITS = 300;
 
 export const dynamic = 'force-dynamic';
 
@@ -63,6 +69,21 @@ export async function GET(req: Request) {
   session.refreshToken = tokens.refresh_token;
   session.expiresAt = claims.exp;
   await session.save();
+
+  // Grant starter + daily credits to new users (only on first login)
+  const userId = String(claims.sub);
+  const existing = await db
+    .select()
+    .from(userCreditsSchema)
+    .where(eq(userCreditsSchema.userId, userId))
+    .limit(1);
+
+  if (existing.length === 0) {
+    await db.insert(userCreditsSchema).values({
+      userId,
+      credits: STARTER_CREDITS + DAILY_CREDITS,
+    });
+  }
 
   const locale = cookieStore.get('NEXT_LOCALE')?.value ?? 'en';
   return NextResponse.redirect(`${base}/${locale}/app`);

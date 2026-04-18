@@ -1,6 +1,16 @@
 import { integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
+export const userCreditsSchema = pgTable('user_credits', {
+  userId: text('user_id').primaryKey(),
+  credits: integer('credits').notNull().default(0),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' })
+    .defaultNow()
+    .$onUpdate(() => new Date())
+    .notNull(),
+});
+
 export const userGithubTokensSchema = pgTable('user_github_tokens', {
   userId: text('user_id').primaryKey(),
   githubToken: text('github_token').notNull(),
