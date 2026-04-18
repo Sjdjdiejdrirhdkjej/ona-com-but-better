@@ -520,6 +520,7 @@ export default function AppPage() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [sandboxBooting, setSandboxBooting] = useState(false);
   const [sandboxToastId, setSandboxToastId] = useState<string | null>(null);
+  const [taskListOpen, setTaskListOpen] = useState(true);
   const bgPollTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const abortControllerRef = useRef<AbortController | null>(null);
   // Tracks conversations where the SSE stream is confirmed to be delivering
@@ -2243,6 +2244,128 @@ export default function AppPage() {
 
           {/* ── Todo panel (ultrawork loop) ── */}
           <TodoPanel todos={todos} onDismiss={() => setTodos([])} />
+
+          {/* ── Past tasks list ── */}
+          {(() => {
+            const q = search.trim().toLowerCase();
+            const pastTasks = conversations.filter(c => c.messages.length > 0);
+            if (loadingHistory || pastTasks.length === 0) return null;
+            const filtered = pastTasks.filter((c) => {
+              if (!q) return true;
+              if (c.title.toLowerCase().includes(q)) return true;
+              return c.messages.some(m =>
+                (typeof m.content === 'string' ? m.content : JSON.stringify(m.content))
+                  .toLowerCase()
+                  .includes(q),
+              );
+            });
+            return (
+              <div
+                className="shrink-0 border-t border-gray-200 dark:border-gray-800"
+                style={{ backgroundColor: 'var(--bg)' }}
+              >
+                <div className="mx-auto max-w-3xl px-3 sm:px-6">
+                  <button
+                    onClick={() => setTaskListOpen(o => !o)}
+                    className="flex w-full items-center justify-between py-2.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <svg width="11" height="11" viewBox="0 0 11 11" fill="none" className={`transition-transform ${taskListOpen ? 'rotate-90' : ''}`}>
+                        <path d="M3 2l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      Past tasks
+                      <span className="rounded-full bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-500 dark:text-gray-400">{pastTasks.length}</span>
+                    </span>
+                    {taskListOpen && (
+                      <div className="relative">
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          value={search}
+                          onChange={e => { e.stopPropagation(); setSearch(e.target.value); }}
+                          onClick={e => e.stopPropagation()}
+                          placeholder="Search…"
+                          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 py-1 pl-2.5 pr-2 text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:border-gray-400 dark:focus:border-gray-600 transition-colors"
+                          style={{ width: '120px' }}
+                        />
+                      </div>
+                    )}
+                  </button>
+                  {taskListOpen && (
+                    <div className="max-h-56 overflow-y-auto pb-3 space-y-0.5">
+                      {filtered.length === 0
+                        ? (
+                            <p className="px-1 py-2 text-xs text-gray-400 dark:text-gray-500">
+                              {q ? 'No tasks match your search.' : 'No past tasks.'}
+                            </p>
+                          )
+                        : filtered.map(c => (
+                            <div
+                              key={c.id}
+                              className={`group flex w-full items-stretch overflow-hidden rounded-xl text-left transition-colors ${
+                                c.id === activeId
+                                  ? 'bg-black/8 dark:bg-white/10 text-gray-900 dark:text-gray-100'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-black/5 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100'
+                              }`}
+                            >
+                              <button
+                                onClick={() => { if (renamingId !== c.id) setActiveId(c.id); }}
+                                onDoubleClick={e => syncedIds.current.has(c.id) && startRenaming(c.id, c.title, e)}
+                                className="min-w-0 flex-1 px-3 py-2 text-left"
+                                aria-label={`Switch to task: ${c.title}`}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  {renamingId === c.id
+                                    ? (
+                                        <input
+                                          ref={renameInputRef}
+                                          value={renameValue}
+                                          onChange={e => setRenameValue(e.target.value)}
+                                          onKeyDown={e => {
+                                            if (e.key === 'Enter') { e.preventDefault(); commitRename(c.id); }
+                                            if (e.key === 'Escape') { e.preventDefault(); cancelRename(); }
+                                          }}
+                                          onBlur={() => commitRename(c.id)}
+                                          onClick={e => e.stopPropagation()}
+                                          className="w-full truncate rounded border border-indigo-400 dark:border-indigo-500 bg-white dark:bg-gray-800 px-1 py-0.5 text-xs font-medium text-gray-900 dark:text-gray-100 outline-none ring-2 ring-indigo-300/50"
+                                          aria-label="Rename task"
+                                        />
+                                      )
+                                    : (
+                                        <span className="flex min-w-0 items-center gap-1.5">
+                                          <span className="truncate text-xs font-medium leading-tight">
+                                            <HighlightText text={c.title} query={q} />
+                                          </span>
+                                          {c.activeJobId && (
+                                            <svg width="7" height="7" viewBox="0 0 8 8" fill="none" className="shrink-0 text-indigo-400" style={{ animation: 'ona-spin 1s linear infinite' }}>
+                                              <circle cx="4" cy="4" r="3" stroke="currentColor" strokeWidth="1" strokeOpacity="0.25" />
+                                              <path d="M4 1A3 3 0 017 4" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+                                            </svg>
+                                          )}
+                                        </span>
+                                      )}
+                                </div>
+                                {renamingId !== c.id && (
+                                  <p suppressHydrationWarning className="mt-0.5 text-[10px] text-gray-400 dark:text-gray-500">{relativeTime(c.createdAt)}</p>
+                                )}
+                              </button>
+                              <button
+                                onClick={e => deleteConversation(c.id, e)}
+                                className="delete-btn flex w-9 shrink-0 items-center justify-center border-l border-black/5 dark:border-white/8 text-gray-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                                aria-label="Delete task"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
