@@ -1866,7 +1866,7 @@ export default function AppPage() {
                     <p className="mb-7 max-w-xs text-sm text-gray-500 dark:text-gray-400 sm:max-w-sm text-center">
                       Connect GitHub, describe a task, and a background agent can inspect repos, create a branch, commit changes, and open a pull request.
                     </p>
-                    <div className="relative w-full max-w-2xl">
+                    <div className="relative w-full max-w-4xl">
                       {/* @ mention file picker */}
                       {atMention && (
                         <div
@@ -2170,7 +2170,7 @@ export default function AppPage() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex size-9 shrink-0 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800"
+                    className="flex size-11 shrink-0 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800"
                     aria-label="Attach image"
                   >
                     <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
@@ -2182,20 +2182,20 @@ export default function AppPage() {
                   <input suppressHydrationWarning ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                   <textarea
                     ref={textareaRef}
-                    rows={1}
+                    rows={7}
                     value={input}
                     onChange={autoResize}
                     onKeyDown={handleKey}
                     onPaste={handlePaste}
                     placeholder="Describe a task for your agent…"
-                    className="flex-1 resize-none bg-transparent py-1 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
-                    style={{ maxHeight: '160px' }}
+                    className="flex-1 resize-none bg-transparent py-3 text-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
+                    style={{ maxHeight: '360px' }}
                   />
                   {loading ? (
                     <button
                       onClick={stopGeneration}
                       aria-label="Stop"
-                      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 active:opacity-70"
+                      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 active:opacity-70"
                     >
                       <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                         <rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor" />
@@ -2206,7 +2206,7 @@ export default function AppPage() {
                       onClick={() => send(input, pendingImage ?? undefined)}
                       disabled={!canSend}
                       aria-label="Send"
-                      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 disabled:opacity-25 active:opacity-70"
+                      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 disabled:opacity-25 active:opacity-70"
                     >
                       <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                         <path d="M7 12V2M7 2L3 6M7 2L11 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
