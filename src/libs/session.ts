@@ -6,6 +6,7 @@ export type SessionUser = {
   firstName: string | null;
   lastName: string | null;
   profileImageUrl: string | null;
+  credits?: number;
 };
 
 export type AppSession = {

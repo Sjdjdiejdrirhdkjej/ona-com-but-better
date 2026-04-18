@@ -66,6 +66,9 @@ export function UserDropdown() {
             <div className="border-b border-black/8 dark:border-white/8 px-3.5 py-2.5">
               <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">{name}</p>
               <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
+              <p className="mt-1 truncate text-xs font-medium text-gray-700 dark:text-gray-300">
+                {user.credits ?? 0} credits
+              </p>
             </div>
             <div className="p-1">
               <button
