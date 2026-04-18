@@ -1887,7 +1887,7 @@ export default function AppPage() {
                   </div>
                 )
               : (
-                  <div ref={messagesContentRef} className="mx-auto max-w-2xl space-y-5">
+                  <div ref={messagesContentRef} className="space-y-5">
                     {messages
                       .filter(m => m.role === 'tool_steps' || m.role === 'user' || !!m.content)
                       .map(msg => (
@@ -1911,7 +1911,7 @@ export default function AppPage() {
 
           {/* ── Input bar ── */}
           <div className="shrink-0 border-t border-gray-200 dark:border-gray-800 px-3 py-3 sm:px-6 sm:py-4">
-            <div className="relative mx-auto max-w-2xl">
+            <div className="relative">
               {/* @ mention file picker */}
               {atMention && (
                 <div
