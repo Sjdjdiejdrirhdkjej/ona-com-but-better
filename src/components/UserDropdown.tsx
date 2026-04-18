@@ -12,6 +12,7 @@ export function UserDropdown() {
 
   const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email;
   const initial = (name ?? 'U')[0]?.toUpperCase() ?? 'U';
+  const credits = user.credits ?? 0;
 
   return (
     <>
@@ -46,6 +47,16 @@ export function UserDropdown() {
                 </div>
               )}
           <span className="hidden max-w-[120px] truncate sm:block">{name}</span>
+
+          {/* Credits badge — always visible */}
+          <span className="flex items-center gap-1 rounded-full bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor" aria-hidden="true">
+              <circle cx="5" cy="5" r="4.5" stroke="currentColor" strokeWidth="1" fill="none" />
+              <text x="5" y="7.5" textAnchor="middle" fontSize="6" fontWeight="bold" fill="currentColor">C</text>
+            </svg>
+            {credits.toLocaleString()}
+          </span>
+
           <svg
             width="12"
             height="12"
@@ -60,15 +71,21 @@ export function UserDropdown() {
 
         {open && (
           <div
-            className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-black/10 dark:border-white/10 shadow-xl"
+            className="absolute right-0 top-full mt-1.5 w-56 rounded-xl border border-black/10 dark:border-white/10 shadow-xl"
             style={{ backgroundColor: 'var(--bg)' }}
           >
             <div className="border-b border-black/8 dark:border-white/8 px-3.5 py-2.5">
               <p className="truncate text-xs font-medium text-gray-900 dark:text-gray-100">{name}</p>
               <p className="truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</p>
-              <p className="mt-1 truncate text-xs font-medium text-gray-700 dark:text-gray-300">
-                {user.credits ?? 0} credits
-              </p>
+              <div className="mt-2 flex items-center gap-1.5">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" className="text-indigo-500">
+                  <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+                  <path d="M6 3.5v5M4 6h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                </svg>
+                <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                  {credits.toLocaleString()} credits
+                </span>
+              </div>
             </div>
             <div className="p-1">
               <button
