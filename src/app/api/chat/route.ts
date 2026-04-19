@@ -8,6 +8,7 @@ import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/Git
 import { daytonaToolDefinitions, isDaytonaTool, prebootSandbox, runDaytonaTool } from '@/libs/Daytona';
 import { callLibrarianToolDefinition, isCallLibrarianTool, runLibrarianSubagent } from '@/libs/Librarian';
 import { callBrowserUseToolDefinition, isCallBrowserUseTool, runBrowserUseSubagent } from '@/libs/BrowserUse';
+import { callOracleToolDefinition, isCallOracleTool, runOracleSubagent } from '@/libs/Oracle';
 import type { TouchedFileDiff } from '@/libs/FileDiff';
 
 export const runtime = 'nodejs';
@@ -235,6 +236,16 @@ For all other requests (no specific repo target), tell the user to connect their
 **How it works:** The expert runs a persistent cloud browser via Playwright over CDP (no vision model needed — pages are read as accessibility trees with interactive element ref IDs like @e1, @e2). It can navigate, click, type, scroll, press keys, select dropdowns, and take screenshots all within the same stateful session — enabling login flows, multi-step forms, and SPA navigation.
 
 **Example:** \`call_browser_use({ task: "Go to https://example.com/login, fill the email field with test@test.com and the password field with pass123, submit the form, then return what page appears and take a screenshot." })\`
+
+---
+
+### \`call_oracle\` — deep reasoning
+
+**Use for:** architecture decisions, complex debugging hypotheses, multi-step strategy, tradeoff analysis, planning, and synthesis where a second GLM 5.1 reasoning agent can think deeply and return a comprehensive report.
+
+**Do NOT use for:** live/current external facts, package API verification, or browser state. Use \`call_librarian\` for evidence and \`call_browser_use\` for live browser work.
+
+**Example:** \`call_oracle({ request: "Evaluate the safest architecture for adding multi-tenant billing to this app, including risks, schema changes, rollout plan, and edge cases." })\`
 
 ---
 
@@ -495,6 +506,11 @@ function toolLabel(name: string, args: Record<string, unknown> = {}): string {
     case 'call_browser_use': {
       const task = s('task');
       return task ? `Browser: ${trim(task, 52)}` : 'Using browser';
+    }
+
+    case 'call_oracle': {
+      const request = s('request');
+      return request ? `Oracle: ${trim(request, 55)}` : 'Consulting oracle';
     }
 
     // ── Ultrawork tools ───────────────────────────────────────────────────
@@ -915,7 +931,7 @@ export async function POST(req: NextRequest) {
         let noGhAssistantMsgId = assistantMessageId ?? crypto.randomUUID();
         let noGhAssistantText = '';
         const noGhRecentSigs: string[] = [];
-        const noGhTools = [...daytonaToolDefinitions, callLibrarianToolDefinition, callBrowserUseToolDefinition];
+        const noGhTools = [...daytonaToolDefinitions, callLibrarianToolDefinition, callBrowserUseToolDefinition, callOracleToolDefinition];
 
         for (;;) {
           let iterText = '';
@@ -1015,6 +1031,20 @@ export async function POST(req: NextRequest) {
                 const report = typeof result === 'string' ? result : JSON.stringify(result);
                 emit({ type: 'browser_use_report', parentLabel: label, report });
                 if (jobId) persistJobEvent(jobId, 'browser_use_report', { parentLabel: label, report }).catch(() => {});
+              } else if (isCallOracleTool(toolName)) {
+                const request = typeof toolArgs.request === 'string' ? toolArgs.request : JSON.stringify(toolArgs);
+                result = await runOracleSubagent(request, (event, stepLabel, error) => {
+                  if (event === 'start') {
+                    emit({ type: 'oracle_step_start', parentLabel: label, step: stepLabel });
+                    if (jobId) persistJobEvent(jobId, 'oracle_step_start', { parentLabel: label, step: stepLabel }).catch(() => {});
+                  } else {
+                    emit({ type: 'oracle_step_complete', parentLabel: label, step: stepLabel, error: error ?? false });
+                    if (jobId) persistJobEvent(jobId, 'oracle_step_complete', { parentLabel: label, step: stepLabel, error: error ?? false }).catch(() => {});
+                  }
+                });
+                const report = typeof result === 'string' ? result : JSON.stringify(result);
+                emit({ type: 'oracle_report', parentLabel: label, report });
+                if (jobId) persistJobEvent(jobId, 'oracle_report', { parentLabel: label, report }).catch(() => {});
               } else if (isDaytonaTool(toolName)) {
                 result = await runDaytonaTool(toolName, toolArgs);
                 if (toolName === 'sandbox_create' && conversationId) {
@@ -1081,7 +1111,7 @@ export async function POST(req: NextRequest) {
         const { content, toolCalls, finishReason } = await streamChargedFireworksCall(
           {
             messages: conversation,
-            tools: [...githubToolDefinitions, ...daytonaToolDefinitions, callLibrarianToolDefinition, callBrowserUseToolDefinition, ...ULTRAWORK_TOOLS],
+            tools: [...githubToolDefinitions, ...daytonaToolDefinitions, callLibrarianToolDefinition, callBrowserUseToolDefinition, callOracleToolDefinition, ...ULTRAWORK_TOOLS],
             tool_choice: 'auto',
             max_tokens: 16384,
             temperature: 0.15,
@@ -1280,6 +1310,21 @@ export async function POST(req: NextRequest) {
                 const report = typeof result === 'string' ? result : JSON.stringify(result);
                 emit({ type: 'browser_use_report', parentLabel, report });
                 if (jobId) persistJobEvent(jobId, 'browser_use_report', { parentLabel, report }).catch(() => {});
+              } else if (isCallOracleTool(toolName)) {
+                const request = typeof toolArgs.request === 'string' ? toolArgs.request : JSON.stringify(toolArgs);
+                const parentLabel = label;
+                result = await runOracleSubagent(request, (event, stepLabel, error) => {
+                  if (event === 'start') {
+                    emit({ type: 'oracle_step_start', parentLabel, step: stepLabel });
+                    if (jobId) persistJobEvent(jobId, 'oracle_step_start', { parentLabel, step: stepLabel }).catch(() => {});
+                  } else {
+                    emit({ type: 'oracle_step_complete', parentLabel, step: stepLabel, error: error ?? false });
+                    if (jobId) persistJobEvent(jobId, 'oracle_step_complete', { parentLabel, step: stepLabel, error: error ?? false }).catch(() => {});
+                  }
+                });
+                const report = typeof result === 'string' ? result : JSON.stringify(result);
+                emit({ type: 'oracle_report', parentLabel, report });
+                if (jobId) persistJobEvent(jobId, 'oracle_report', { parentLabel, report }).catch(() => {});
               } else if (isDaytonaTool(toolName)) {
                 result = await runDaytonaTool(toolName, toolArgs);
                 if (toolName === 'sandbox_create' && conversationId) {

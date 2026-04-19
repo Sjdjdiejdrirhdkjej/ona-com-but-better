@@ -10,7 +10,7 @@ An open-source platform for AI background software engineering agents. The landi
 - **ORM**: Drizzle ORM
 - **Styling**: Tailwind CSS v4
 - **i18n**: next-intl with `[locale]` routing, locales en/fr, `as-needed` prefix (so `/app` works without prefix)
-- **AI**: Fireworks AI — ONA Max uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`); ONA Max Fast uses Kimi K2.5 Turbo (`accounts/fireworks/routers/kimi-k2p5-turbo`); ONA Mini uses Qwen3 30B A3B Instruct (`accounts/fireworks/models/qwen3-30b-a3b-instruct-2507`); the Librarian research subagent uses Kimi K2 Thinking (`accounts/fireworks/models/kimi-k2-thinking`); the Browser Use Expert subagent uses Kimi K2 Instruct 0905 (`accounts/fireworks/models/kimi-k2-instruct-0905`) — all overridable via env vars
+- **AI**: Fireworks AI — ONA Max uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`); ONA Max Fast uses Kimi K2.5 Turbo (`accounts/fireworks/routers/kimi-k2p5-turbo`); ONA Mini uses Qwen3 30B A3B Instruct (`accounts/fireworks/models/qwen3-30b-a3b-instruct-2507`); the Oracle deep-reasoning subagent uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`); the Librarian research subagent uses Kimi K2 Thinking (`accounts/fireworks/models/kimi-k2-thinking`); the Browser Use Expert subagent uses Kimi K2 Instruct 0905 (`accounts/fireworks/models/kimi-k2-instruct-0905`) — all overridable via env vars
 - **GitHub delivery policy**: repository changes default to branch + pull request; direct writes to the repository default branch are blocked unless the user explicitly asks for a direct push.
 - **Package manager**: npm (with `legacy-peer-deps=true` in `.npmrc`)
 
@@ -63,6 +63,7 @@ An open-source platform for AI background software engineering agents. The landi
 - Suggestion chips: Inspect repos, Clone a repo, Review PRs, Find CVEs
 - `/app` task history remains available via the top History control and the collapsible Past tasks tray; both support search/switching, and persisted conversations can be renamed/deleted
 - Librarian research tasks are handled by `src/libs/Librarian.ts` as an autonomous source-grounded research analyst with a longer research loop and detailed implementation-ready reports
+- Oracle deep-reasoning tasks are handled by `src/libs/Oracle.ts` using GLM 5.1, iterative self-audit/refinement, and a `call_oracle` tool for complex reasoning, architecture, strategy, debugging, and synthesis requests.
 - Browser automation tasks are handled by `src/libs/BrowserUse.ts` — the Browser Use Expert subagent uses Firecrawl's cloud-hosted browser (full JS rendering) to navigate, click, fill forms, scroll, screenshot, and extract data from live websites. Invoked via `call_browser_use` tool — internal tools (`browse`, `screenshot`, `search_web`) are never exposed to the main AI. Model overridable via `FIREWORKS_BROWSER_MODEL` env var.
 - File-edit tool steps now attach touched-file metadata with unified diffs for `sandbox_write_file`, `github_upsert_file`, and `github_delete_file`. The `/app` tool-step block renders a collapsible diff panel so users can inspect files changed by the AI.
 

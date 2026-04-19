@@ -45,6 +45,7 @@ type ToolStep = {
   subSteps?: SubStep[];
   librarianReport?: string;
   browserReport?: string;
+  oracleReport?: string;
   touchedFiles?: TouchedFileDiff[];
 };
 
@@ -288,10 +289,12 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
           const hasSubSteps = !!(step.subSteps && step.subSteps.length > 0);
           const hasReport = !!step.librarianReport;
           const hasBrowserReport = !!step.browserReport;
+          const hasOracleReport = !!step.oracleReport;
           const hasDiff = !!(step.touchedFiles && step.touchedFiles.length > 0);
           const isOpen = expandedLabels.has(step.label) || (step.status === 'running' && hasSubSteps);
           const isReportOpen = expandedReports.has(step.label);
           const isBrowserReportOpen = expandedReports.has(`${step.label}::browser`);
+          const isOracleReportOpen = expandedReports.has(`${step.label}::oracle`);
           const isDiffOpen = expandedReports.has(`${step.label}::diff`);
           return (
             <div key={i}>
@@ -356,6 +359,18 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
                     {isBrowserReportOpen ? 'Hide trace' : 'Browser trace'}
                   </button>
                 )}
+                {hasOracleReport && (
+                  <button
+                    onClick={() => toggleReport(`${step.label}::oracle`)}
+                    className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-purple-400 hover:text-purple-600 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M5 2.5v5M2.5 5h5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+                    </svg>
+                    {isOracleReportOpen ? 'Hide oracle' : 'Oracle report'}
+                  </button>
+                )}
               </div>
               {hasSubSteps && isOpen && (
                 <div className="mt-1.5 ml-4 pl-3 space-y-1 border-l border-gray-200 dark:border-gray-700">
@@ -389,6 +404,11 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
               {hasBrowserReport && isBrowserReportOpen && (
                 <div className="mt-2 ml-4 rounded-xl border border-sky-100 dark:border-sky-900/60 bg-sky-50/60 dark:bg-sky-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
                   <AssistantMarkdownLazy text={step.browserReport!} />
+                </div>
+              )}
+              {hasOracleReport && isOracleReportOpen && (
+                <div className="mt-2 ml-4 rounded-xl border border-purple-100 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
+                  <AssistantMarkdownLazy text={step.oracleReport!} />
                 </div>
               )}
             </div>
@@ -879,6 +899,32 @@ export default function AppPage() {
               const parentLabel = ev.data.parentLabel as string;
               const report = ev.data.report as string;
               messages = applyStepUpdate(messages, s => s.label === parentLabel, s => ({ ...s, browserReport: report }));
+            } else if (ev.type === 'oracle_step_start') {
+              const parentLabel = ev.data.parentLabel as string;
+              const step = ev.data.step as string;
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({ ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }),
+              );
+            } else if (ev.type === 'oracle_step_complete') {
+              const parentLabel = ev.data.parentLabel as string;
+              const step = ev.data.step as string;
+              const hasError = !!ev.data.error;
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({
+                  ...s,
+                  subSteps: (s.subSteps ?? []).map(sub =>
+                    sub.label === step ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] } : sub,
+                  ),
+                }),
+              );
+            } else if (ev.type === 'oracle_report') {
+              const parentLabel = ev.data.parentLabel as string;
+              const report = ev.data.report as string;
+              messages = applyStepUpdate(messages, s => s.label === parentLabel, s => ({ ...s, oracleReport: report }));
             } else if (ev.type === 'sandbox_booting') {
               setSandboxBooting(true);
             } else if (ev.type === 'sandbox_ready') {
@@ -1543,6 +1589,71 @@ export default function AppPage() {
                           ...m,
                           content: (m.content as ToolStep[]).map(s =>
                             s.label === parentLabel ? { ...s, browserReport: report } : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'oracle_step_start' && json.parentLabel && json.step) {
+              const { parentLabel, step } = json as { parentLabel: string; step: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel
+                              ? { ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'oracle_step_complete' && json.parentLabel && json.step) {
+              const { parentLabel, step, error: hasError } = json as { parentLabel: string; step: string; error?: boolean };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel
+                              ? {
+                                  ...s,
+                                  subSteps: (s.subSteps ?? []).map(sub =>
+                                    sub.label === step
+                                      ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] }
+                                      : sub,
+                                  ),
+                                }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'oracle_report' && json.parentLabel && json.report) {
+              const { parentLabel, report } = json as { parentLabel: string; report: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel ? { ...s, oracleReport: report } : s,
                           ),
                         }
                       : m,
