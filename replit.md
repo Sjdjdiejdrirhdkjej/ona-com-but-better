@@ -15,6 +15,7 @@ An open-source platform for AI background software engineering agents. The landi
 - **Package manager**: npm (with `legacy-peer-deps=true` in `.npmrc`)
 
 ## Replit Configuration
+- **Runtime**: Node.js 22, matching the `package.json` engine requirement
 - **Port**: 5000, bound to `0.0.0.0` (required for Replit preview)
 - **Workflow**: "Start application" runs `npm run dev` on port 5000 with host `0.0.0.0`
   - The development server is used for Replit preview compatibility during active building
