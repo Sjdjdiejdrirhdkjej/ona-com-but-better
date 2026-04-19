@@ -4,20 +4,24 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSafeBrowserReturnPath, navigateTopLevel } from '@/utils/browserCompat';
 
 type SignInLauncherProps = {
+  errorMessage?: string;
   href: string;
   label: string;
   returnTo: string;
   showContinue?: boolean;
 };
 
-type SignInStatus = 'idle' | 'waiting' | 'blocked' | 'timeout' | 'checking';
+type SignInStatus = 'idle' | 'waiting' | 'blocked' | 'timeout' | 'checking' | 'failed';
 
 const MAX_SESSION_CHECKS = 45;
 const SESSION_CHECK_INTERVAL_MS = 2000;
+const AUTH_EVENT_CHANNEL = 'ona-auth-handoff';
+const AUTH_ERROR_STORAGE_KEY = 'ona-auth-error';
 
-export function SignInLauncher({ href, label, returnTo, showContinue = false }: SignInLauncherProps) {
+export function SignInLauncher({ errorMessage, href, label, returnTo, showContinue = false }: SignInLauncherProps) {
   const [status, setStatus] = useState<SignInStatus>('idle');
   const [attempts, setAttempts] = useState(0);
+  const [handoffError, setHandoffError] = useState<string | null>(errorMessage || null);
   const attemptsRef = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
@@ -115,6 +119,54 @@ export function SignInLauncher({ href, label, returnTo, showContinue = false }: 
   }, [returnTo]);
 
   useEffect(() => {
+    const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(AUTH_EVENT_CHANNEL) : null;
+
+    function handleAuthError(message: string) {
+      clearPendingCheck();
+      setHandoffError(message);
+      setStatus('failed');
+    }
+
+    function handleChannelMessage(event: MessageEvent) {
+      if (event.data?.type === 'ona-auth-error' && typeof event.data.message === 'string') {
+        handleAuthError(event.data.message);
+      }
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key !== AUTH_ERROR_STORAGE_KEY || !event.newValue) {
+        return;
+      }
+
+      try {
+        const data = JSON.parse(event.newValue);
+        if (data?.type === 'ona-auth-error' && typeof data.message === 'string') {
+          handleAuthError(data.message);
+        }
+      } catch {
+      }
+    }
+
+    channel?.addEventListener('message', handleChannelMessage);
+    window.addEventListener('storage', handleStorage);
+
+    if (errorMessage) {
+      const payload = { type: 'ona-auth-error', message: errorMessage, ts: Date.now() };
+      channel?.postMessage(payload);
+      try {
+        window.localStorage.setItem(AUTH_ERROR_STORAGE_KEY, JSON.stringify(payload));
+      } catch {
+      }
+    }
+
+    return () => {
+      channel?.removeEventListener('message', handleChannelMessage);
+      channel?.close();
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [clearPendingCheck, errorMessage]);
+
+  useEffect(() => {
     void checkSession(false);
 
     function checkWhenVisible() {
@@ -140,9 +192,11 @@ export function SignInLauncher({ href, label, returnTo, showContinue = false }: 
       ? 'Your browser blocked the sign-in tab. Use the link below to open Replit sign-in, then return here.'
       : status === 'timeout'
         ? 'We could not detect a completed sign-in yet. You can try again or continue in this tab.'
-        : status === 'checking'
-          ? 'Checking whether you are already signed in…'
-          : 'Replit sign-in will open separately so this ONA tab stays available.';
+        : status === 'failed'
+          ? handoffError || 'Replit sign-in could not be completed. You can try again or continue in this tab.'
+          : status === 'checking'
+            ? 'Checking whether you are already signed in…'
+            : 'Replit sign-in will open separately so this ONA tab stays available.';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
@@ -171,9 +225,9 @@ export function SignInLauncher({ href, label, returnTo, showContinue = false }: 
         {progressText}
       </p>
 
-      {(status === 'blocked' || status === 'timeout' || showContinue) && (
+      {(status === 'blocked' || status === 'timeout' || status === 'failed' || showContinue) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px' }}>
-          {(status === 'blocked' || status === 'timeout') && (
+          {(status === 'blocked' || status === 'timeout' || status === 'failed') && (
             <>
               <a
                 href={href}

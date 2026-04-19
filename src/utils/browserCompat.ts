@@ -87,7 +87,12 @@ export function isMobileBrowser(): boolean {
     return false;
   }
 
-  return /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+  const userAgent = navigator.userAgent || '';
+  const platform = navigator.platform || '';
+  const hasTouch = navigator.maxTouchPoints > 1;
+
+  return /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent)
+    || (hasTouch && /Mac/i.test(platform));
 }
 
 export function navigateTopLevel(destination: string, mode: 'assign' | 'replace' = 'assign') {
