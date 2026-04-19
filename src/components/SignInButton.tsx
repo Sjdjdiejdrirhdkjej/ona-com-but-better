@@ -1,12 +1,13 @@
 'use client';
 
-import { signIn } from '@/libs/auth-client';
+import { useRouter } from 'next/navigation';
 
 export function SignInButton() {
+  const router = useRouter();
   return (
     <button
       type="button"
-      onClick={signIn}
+      onClick={() => router.push('/app')}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -22,7 +23,7 @@ export function SignInButton() {
         transition: 'opacity 0.2s',
       }}
     >
-      Sign in with Replit
+      Get started
     </button>
   );
 }

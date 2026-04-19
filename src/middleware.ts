@@ -1,38 +1,15 @@
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import createIntlMiddleware from 'next-intl/middleware';
 
 import { routing } from './libs/I18nRouting';
 
 const handleI18nRouting = createIntlMiddleware(routing);
 
-const isProtectedRoute = (pathname: string) =>
-  /\/(en|fr)?\/?(app)(\/|$)/.test(pathname)
-  || pathname === '/app'
-  || pathname.startsWith('/app/');
-
-const isMarketingRoot = (pathname: string) =>
-  pathname === '/' || /^\/(en|fr)\/?$/.test(pathname);
-
 export default async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Skip middleware entirely for API routes
   if (pathname.startsWith('/api/')) {
-    return NextResponse.next();
-  }
-
-  const sessionCookie = req.cookies.get('replit_session');
-
-  // Redirect already-authenticated users from the landing page straight to the app
-  if (isMarketingRoot(pathname) && sessionCookie) {
-    const locale = pathname.startsWith('/fr') ? 'fr' : 'en';
-    return NextResponse.redirect(new URL(`/${locale}/app`, req.url));
-  }
-
-  // Guard protected routes
-  if (isProtectedRoute(pathname) && !sessionCookie) {
-    return NextResponse.redirect(new URL('/api/login', req.url));
+    return;
   }
 
   return handleI18nRouting(req);

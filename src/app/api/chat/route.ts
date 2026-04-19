@@ -1,10 +1,9 @@
 import type { NextRequest } from 'next/server';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod/v4';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
-import { getUser } from '@/libs/auth';
-import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema, userCreditsSchema } from '@/models/Schema';
+import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/GitHub';
 import { daytonaToolDefinitions, isDaytonaTool, prebootSandbox, runDaytonaTool } from '@/libs/Daytona';
 import { callLibrarianToolDefinition, isCallLibrarianTool, runLibrarianSubagent } from '@/libs/Librarian';
@@ -706,31 +705,6 @@ function estimateMessagesTokens(messages: ApiMessage[]): number {
   }, 0);
 }
 
-function creditsForUsage(usage: FireworksUsage | undefined, inputTokens: number, outputText: string) {
-  const totalTokens = usage?.total_tokens
-    ?? ((usage?.prompt_tokens ?? inputTokens) + (usage?.completion_tokens ?? Math.ceil(outputText.length / 4)));
-  const creditsPerThousandTokens = Number.parseFloat(process.env.CREDITS_PER_1000_TOKENS ?? '1');
-  const safeRate = Number.isFinite(creditsPerThousandTokens) && creditsPerThousandTokens > 0 ? creditsPerThousandTokens : 1;
-  return Math.max(1, Math.ceil((Math.max(1, totalTokens) / 1000) * safeRate));
-}
-
-async function getCreditBalance(userId: string) {
-  const rows = await db
-    .select({ credits: userCreditsSchema.credits })
-    .from(userCreditsSchema)
-    .where(eq(userCreditsSchema.userId, userId))
-    .limit(1);
-  return rows[0]?.credits ?? 0;
-}
-
-async function deductCredits(userId: string, amount: number) {
-  const rows = await db
-    .update(userCreditsSchema)
-    .set({ credits: sql`greatest(0, ${userCreditsSchema.credits} - ${amount})` })
-    .where(eq(userCreditsSchema.userId, userId))
-    .returning({ credits: userCreditsSchema.credits });
-  return rows[0]?.credits ?? 0;
-}
 
 function parseToolArgs(value: string): Record<string, unknown> {
   try {
@@ -839,17 +813,6 @@ export async function POST(req: NextRequest) {
       const fireworksModelId = model && model in ONA_MODELS
         ? ONA_MODELS[model as OnaModelKey].fireworksId
         : undefined;
-      const user = await getUser();
-
-      if (user) {
-        const currentCredits = await getCreditBalance(user.id);
-        if (currentCredits <= 0) {
-          emit({ type: 'error', message: 'You are out of credits. Add more credits to continue using ONA.' });
-          close();
-          return;
-        }
-      }
-
       jobId = conversationId ? (clientJobId ?? crypto.randomUUID()) : null;
       let pendingContentEvent = '';
       let contentFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -882,16 +845,7 @@ export async function POST(req: NextRequest) {
 
       async function streamChargedFireworksCall(body: Record<string, unknown>, onDelta: (delta: string) => void) {
         const apiMessages = Array.isArray(body.messages) ? body.messages as ApiMessage[] : [];
-        const inputTokens = estimateMessagesTokens(apiMessages);
         const result = await streamFireworksCall(body, onDelta, fireworksModelId);
-        if (user) {
-          const creditsSpent = creditsForUsage(result.usage, inputTokens, result.content);
-          const remainingCredits = await deductCredits(user.id, creditsSpent);
-          emit({ type: 'credit_update', credits: remainingCredits, creditsSpent });
-          if (jobId) {
-            await persistJobEvent(jobId, 'credit_update', { credits: remainingCredits, creditsSpent });
-          }
-        }
         return result;
       }
 

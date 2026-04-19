@@ -1,11 +1,4 @@
-import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
-import { eq } from 'drizzle-orm';
-
-import { db } from '@/libs/DB';
-import { userGithubTokensSchema } from '@/models/Schema';
-import type { AppSession } from '@/libs/session';
-import { sessionOptions } from '@/libs/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,20 +32,12 @@ export async function POST(req: Request) {
 
   if (data.access_token) {
     const cookieStore = await cookies();
-    const session = await getIronSession<AppSession>(cookieStore, sessionOptions);
-    session.githubToken = data.access_token;
-    await session.save();
-
-    if (session.user?.id) {
-      await db
-        .insert(userGithubTokensSchema)
-        .values({ userId: session.user.id, githubToken: data.access_token })
-        .onConflictDoUpdate({
-          target: userGithubTokensSchema.userId,
-          set: { githubToken: data.access_token, updatedAt: new Date() },
-        });
-    }
-
+    cookieStore.set('github_token', data.access_token, {
+      httpOnly: true,
+      secure: true,
+      maxAge: 60 * 60 * 24 * 90,
+      path: '/',
+    });
     return Response.json({ status: 'authorized' });
   }
 

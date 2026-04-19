@@ -57,7 +57,7 @@ export function MobileMenu() {
 
             <div className="mt-4 flex flex-col gap-2 border-t border-gray-200 dark:border-gray-800 pt-4">
               <Link
-                href="/api/login"
+                href="/app"
                 onClick={() => setOpen(false)}
                 className="rounded-md bg-gray-950 dark:bg-gray-100 dark:text-gray-900 px-3 py-2.5 text-center text-base font-medium text-white transition-opacity hover:opacity-80"
               >

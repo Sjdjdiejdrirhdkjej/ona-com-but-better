@@ -1,33 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { getUser } from '@/libs/auth';
 import { agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 
 export async function GET(req: NextRequest) {
-  const user = await getUser();
   const sessionId = req.nextUrl.searchParams.get('sessionId');
 
-  if (user) {
-    // If the request also carries a sessionId, silently migrate any unclaimed
-    // conversations from that session to this user so they aren't lost.
-    if (sessionId) {
-      await db
-        .update(conversationsSchema)
-        .set({ userId: user.id })
-        .where(and(eq(conversationsSchema.sessionId, sessionId), isNull(conversationsSchema.userId)));
-    }
-
-    const conversations = await db
-      .select()
-      .from(conversationsSchema)
-      .where(eq(conversationsSchema.userId, user.id))
-      .orderBy(desc(conversationsSchema.updatedAt));
-
-    return Response.json(await hydrateConversations(conversations));
-  }
-
-  // Unauthenticated fallback: scope by sessionId
   const whereClause = sessionId
     ? eq(conversationsSchema.sessionId, sessionId)
     : or(isNull(conversationsSchema.sessionId), eq(conversationsSchema.sessionId, ''));
@@ -76,7 +54,6 @@ async function hydrateConversations(conversations: (typeof conversationsSchema.$
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getUser();
   const { id, title, sessionId } = await req.json() as { id: string; title: string; sessionId?: string };
 
   const [conv] = await db
@@ -85,7 +62,7 @@ export async function POST(req: NextRequest) {
       id,
       title,
       sessionId: sessionId ?? null,
-      userId: user?.id ?? null,
+      userId: null,
     })
     .onConflictDoNothing()
     .returning();
