@@ -16,6 +16,7 @@ function signInRedirect(baseUrl: string, error: string, returnTo?: string) {
 
 async function clearAuthAttempt(session: Awaited<ReturnType<typeof getSession>>) {
   delete session.oidcState;
+  delete session.oidcNonce;
   delete session.codeVerifier;
   delete session.returnTo;
   delete session.authOrigin;
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const session = await getSession();
-    const { oidcState, codeVerifier, authOrigin } = session;
+    const { oidcState, oidcNonce, codeVerifier, authOrigin } = session;
     const baseUrl = authOrigin || requestBaseUrl;
     const returnTo = getSafeReturnPath(session.returnTo, baseUrl);
 
@@ -115,7 +116,7 @@ export async function GET(request: NextRequest) {
       return signInRedirect(baseUrl, 'provider_error', returnTo);
     }
 
-    if (!oidcState || !codeVerifier) {
+    if (!oidcState || !oidcNonce || !codeVerifier) {
       await clearAuthAttempt(session);
       return signInRedirect(baseUrl, 'session_expired', returnTo);
     }
@@ -127,6 +128,7 @@ export async function GET(request: NextRequest) {
     const tokens = await authorizationCodeGrant(config, currentUrl, {
       pkceCodeVerifier: codeVerifier,
       expectedState: oidcState,
+      expectedNonce: oidcNonce,
       expectedRedirectUri: redirectUri,
     });
 
@@ -144,6 +146,7 @@ export async function GET(request: NextRequest) {
       profileImageUrl: (claims.profile_image_url as string) ?? null,
     };
     delete session.oidcState;
+    delete session.oidcNonce;
     delete session.codeVerifier;
     delete session.returnTo;
     delete session.authOrigin;

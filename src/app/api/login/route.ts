@@ -16,10 +16,11 @@ export async function GET(request: NextRequest) {
   try {
     const redirectUri = getRedirectUri(baseUrl);
     const config = await getReplitOidcConfig(redirectUri);
-    const { url, state, codeVerifier } = await buildReplitLoginUrl(config, redirectUri);
+    const { url, state, nonce, codeVerifier } = await buildReplitLoginUrl(config, redirectUri);
 
     const session = await getSession();
     session.oidcState = state;
+    session.oidcNonce = nonce;
     session.codeVerifier = codeVerifier;
     session.returnTo = returnTo;
     session.authOrigin = baseUrl;

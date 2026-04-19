@@ -2,6 +2,7 @@ import {
   buildAuthorizationUrl,
   calculatePKCECodeChallenge,
   dynamicClientRegistration,
+  randomNonce,
   randomPKCECodeVerifier,
   randomState,
   authorizationCodeGrant,
@@ -24,6 +25,7 @@ export type SessionUser = {
 export type OidcSessionData = {
   user?: SessionUser;
   oidcState?: string;
+  oidcNonce?: string;
   codeVerifier?: string;
   returnTo?: string;
   authOrigin?: string;
@@ -173,20 +175,22 @@ export async function getSession() {
   return getIronSession<OidcSessionData>(cookieStore, SESSION_OPTIONS);
 }
 
-export async function buildReplitLoginUrl(config: Configuration, redirectUri = getRedirectUri()): Promise<{ url: URL; state: string; codeVerifier: string }> {
+export async function buildReplitLoginUrl(config: Configuration, redirectUri = getRedirectUri()): Promise<{ url: URL; state: string; nonce: string; codeVerifier: string }> {
   const codeVerifier = randomPKCECodeVerifier();
   const codeChallenge = await calculatePKCECodeChallenge(codeVerifier);
   const state = randomState();
+  const nonce = randomNonce();
 
   const url = buildAuthorizationUrl(config, {
     redirect_uri: redirectUri,
     scope: 'openid profile email',
     state,
+    nonce,
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
   });
 
-  return { url, state, codeVerifier };
+  return { url, state, nonce, codeVerifier };
 }
 
 export { authorizationCodeGrant };
