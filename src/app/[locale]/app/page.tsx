@@ -631,6 +631,9 @@ export default function AppPage() {
   useEffect(() => {
     setAtMention(null);
     setSandboxFiles([]);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
   }, [activeId]);
 
   function scheduleBackgroundPoll(convId: string, jobId: string, cursor: number, rebuild = false) {
@@ -1945,7 +1948,7 @@ export default function AppPage() {
           <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
             {showEmptyPrompt
               ? (
-                  <div className="flex h-full flex-col items-center justify-center px-0 py-8 sm:px-8">
+                  <div key={activeId} className="flex h-full flex-col items-center justify-center px-0 py-8 sm:px-8">
                     <h1
                       className="mb-6 text-center text-3xl text-gray-900 dark:text-gray-100 sm:text-4xl"
                       style={{ fontFamily: SERIF, fontWeight: 400 }}
@@ -2133,7 +2136,7 @@ export default function AppPage() {
                   </div>
                 )
               : (
-                  <div ref={messagesContentRef} className="mx-auto max-w-3xl space-y-5">
+                  <div key={activeId} ref={messagesContentRef} className="mx-auto max-w-3xl space-y-5">
                     {messages
                       .filter(m => m.role === 'tool_steps' || m.role === 'user' || !!m.content)
                       .map(msg => (
