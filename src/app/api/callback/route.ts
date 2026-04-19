@@ -63,7 +63,9 @@ function authCompleteResponse(baseUrl: string, returnTo: string) {
     const origin = ${JSON.stringify(origin)};
     const returnTo = ${JSON.stringify(returnTo)};
     const userAgent = navigator.userAgent || '';
-    const isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent);
+    const platform = navigator.platform || '';
+    const hasTouch = navigator.maxTouchPoints > 1;
+    const isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent) || (hasTouch && /Mac/i.test(platform));
 
     function navigateCurrentTab() {
       try {
