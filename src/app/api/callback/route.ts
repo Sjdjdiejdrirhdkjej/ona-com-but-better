@@ -59,23 +59,32 @@ function authCompleteResponse(baseUrl: string, returnTo: string) {
     const destination = ${JSON.stringify(destination)};
     const origin = ${JSON.stringify(origin)};
     const returnTo = ${JSON.stringify(returnTo)};
-    let sentToOpener = false;
-    try {
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: 'ona-auth-complete', returnTo }, origin);
-        sentToOpener = true;
-        window.setTimeout(() => window.close(), 500);
-      }
-    } catch {}
-    window.setTimeout(() => {
+
+    function navigateCurrentTab() {
       try {
         if (window.top && window.top !== window.self) {
           window.top.location.replace(destination);
           return;
         }
       } catch {}
+
       window.location.replace(destination);
-    }, sentToOpener ? 900 : 350);
+    }
+
+    function canUseDesktopPopupHandoff() {
+      const userAgent = navigator.userAgent || '';
+      const isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent);
+      return !isMobileBrowser && window.opener && !window.opener.closed;
+    }
+
+    navigateCurrentTab();
+
+    try {
+      if (canUseDesktopPopupHandoff()) {
+        window.opener.postMessage({ type: 'ona-auth-complete', returnTo }, origin);
+      }
+    } catch {}
+
   </script>
 </body>
 </html>`;

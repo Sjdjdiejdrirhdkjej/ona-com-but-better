@@ -48,11 +48,7 @@ export function SignInLauncher({ autoStart, href, label, returnTo }: SignInLaunc
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      startAuth();
-    }, 350);
-
-    return () => window.clearTimeout(timer);
+    startAuth();
   }, [autoStart, href]);
 
   return (
