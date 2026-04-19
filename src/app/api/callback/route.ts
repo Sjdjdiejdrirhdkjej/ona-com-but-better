@@ -78,16 +78,21 @@ function authCompleteResponse(baseUrl: string, returnTo: string) {
       window.location.replace(destination);
     }
 
-    function canUseDesktopPopupHandoff() {
-      return !isMobileBrowser && window.opener && !window.opener.closed;
+    function notifyWaitingTab() {
+      const payload = { type: 'ona-auth-complete', returnTo, ts: Date.now() };
+      try {
+        const channel = new BroadcastChannel('ona-auth-handoff');
+        channel.postMessage(payload);
+        channel.close();
+      } catch {}
+      try {
+        window.localStorage.setItem('ona-auth-complete', JSON.stringify(payload));
+      } catch {}
     }
 
     try {
-      if (canUseDesktopPopupHandoff()) {
-        window.opener.postMessage({ type: 'ona-auth-complete', returnTo }, origin);
-        window.close();
-        window.setTimeout(navigateCurrentTab, 300);
-      } else if (!isMobileBrowser) {
+      notifyWaitingTab();
+      if (!isMobileBrowser) {
         window.setTimeout(navigateCurrentTab, 1500);
       }
     } catch {

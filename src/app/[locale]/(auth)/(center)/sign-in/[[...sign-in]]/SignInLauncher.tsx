@@ -16,6 +16,7 @@ type SignInStatus = 'idle' | 'waiting' | 'blocked' | 'timeout' | 'checking' | 'f
 const MAX_SESSION_CHECKS = 45;
 const SESSION_CHECK_INTERVAL_MS = 2000;
 const AUTH_EVENT_CHANNEL = 'ona-auth-handoff';
+const AUTH_COMPLETE_STORAGE_KEY = 'ona-auth-complete';
 const AUTH_ERROR_STORAGE_KEY = 'ona-auth-error';
 
 export function SignInLauncher({ errorMessage, href, label, returnTo, showContinue = false }: SignInLauncherProps) {
@@ -79,26 +80,6 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
     void checkSession(true);
   }, [checkSession]);
 
-  function startAuth() {
-    const popup = window.open(
-      href,
-      'ona-replit-auth',
-      'popup=yes,width=520,height=720,noopener=no,noreferrer=no',
-    );
-
-    if (!popup) {
-      setStatus('blocked');
-      return;
-    }
-
-    try {
-      popup.focus();
-    } catch {
-    }
-
-    startWaiting();
-  }
-
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin) {
@@ -121,6 +102,11 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
   useEffect(() => {
     const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(AUTH_EVENT_CHANNEL) : null;
 
+    function handleAuthComplete(nextReturnTo: string) {
+      const nextPath = getSafeBrowserReturnPath(nextReturnTo, returnTo);
+      navigateTopLevel(nextPath, 'replace');
+    }
+
     function handleAuthError(message: string) {
       clearPendingCheck();
       setHandoffError(message);
@@ -128,19 +114,23 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
     }
 
     function handleChannelMessage(event: MessageEvent) {
-      if (event.data?.type === 'ona-auth-error' && typeof event.data.message === 'string') {
+      if (event.data?.type === 'ona-auth-complete') {
+        handleAuthComplete(typeof event.data.returnTo === 'string' ? event.data.returnTo : returnTo);
+      } else if (event.data?.type === 'ona-auth-error' && typeof event.data.message === 'string') {
         handleAuthError(event.data.message);
       }
     }
 
     function handleStorage(event: StorageEvent) {
-      if (event.key !== AUTH_ERROR_STORAGE_KEY || !event.newValue) {
+      if ((event.key !== AUTH_ERROR_STORAGE_KEY && event.key !== AUTH_COMPLETE_STORAGE_KEY) || !event.newValue) {
         return;
       }
 
       try {
         const data = JSON.parse(event.newValue);
-        if (data?.type === 'ona-auth-error' && typeof data.message === 'string') {
+        if (data?.type === 'ona-auth-complete') {
+          handleAuthComplete(typeof data.returnTo === 'string' ? data.returnTo : returnTo);
+        } else if (data?.type === 'ona-auth-error' && typeof data.message === 'string') {
           handleAuthError(data.message);
         }
       } catch {
@@ -164,7 +154,7 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
       channel?.close();
       window.removeEventListener('storage', handleStorage);
     };
-  }, [clearPendingCheck, errorMessage]);
+  }, [clearPendingCheck, errorMessage, returnTo]);
 
   useEffect(() => {
     if (!errorMessage && !isMobileBrowser()) {
@@ -205,9 +195,11 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-      <button
-        type="button"
-        onClick={startAuth}
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={startWaiting}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -224,7 +216,7 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
         }}
       >
         {status === 'waiting' ? 'Replit sign-in is open…' : label}
-      </button>
+      </a>
 
       <p aria-live="polite" style={{ color: '#666', fontSize: '14px', lineHeight: 1.5, margin: 0, maxWidth: '380px' }}>
         {progressText}
