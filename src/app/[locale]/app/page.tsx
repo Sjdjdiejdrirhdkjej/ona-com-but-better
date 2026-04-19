@@ -15,6 +15,17 @@ const AssistantMarkdownLazy = dynamic(() => import('@/components/AssistantMarkdo
 
 const SERIF = 'Georgia, "Times New Roman", serif';
 const APP_NAME = 'ONA but OPEN SOURCE';
+const MODEL_OPTIONS = [
+  { key: 'ona-max', label: 'ONA Max' },
+  { key: 'ona-max-fast', label: 'ONA Max Fast' },
+  { key: 'ona-mini', label: 'ONA Mini' },
+] as const;
+const PROMPT_SUGGESTIONS = [
+  { label: 'Inspect repos', prompt: 'Inspect my GitHub repositories and summarize the highest-impact improvement opportunities.' },
+  { label: 'Clone a repo', prompt: 'Clone a repository, explore the codebase, and propose a safe implementation plan.' },
+  { label: 'Review PRs', prompt: 'Review my recent pull requests for bugs, security issues, and maintainability risks.' },
+  { label: 'Find CVEs', prompt: 'Find potential CVEs and dependency risks in a repository, then suggest fixes.' },
+];
 
 type ContentPart =
   | { type: 'text'; text: string }
@@ -66,8 +77,8 @@ function relativeTime(ts: number) {
 function OnaAvatar() {
   return (
     <div
-      className="mr-2.5 mt-1 flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-      style={{ background: 'linear-gradient(135deg,#7b68ee,#9370db)' }}
+      className="mr-2.5 mt-1 flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white dark:text-black"
+      style={{ background: 'var(--bg-logo)' }}
     >
       O
     </div>
@@ -137,12 +148,12 @@ function MessageBubble({ msg }: { msg: Message }) {
         )}
         {isUser
           ? (
-              <div className="rounded-2xl rounded-tr-sm bg-gray-900 px-4 py-3 text-sm leading-relaxed text-white whitespace-pre-wrap">
+              <div className="rounded-3xl rounded-tr-md bg-gray-950 px-4 py-3 text-sm leading-relaxed text-white shadow-sm dark:bg-gray-100 dark:text-gray-950 whitespace-pre-wrap">
                 {text}
               </div>
             )
           : (
-              <div className="text-sm leading-relaxed text-gray-800 dark:text-gray-200">
+              <div className="rounded-3xl rounded-tl-md border border-black/6 bg-white/70 px-4 py-3 text-sm leading-relaxed text-gray-800 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
                 <AssistantMarkdownLazy text={text} />
               </div>
             )}
@@ -217,7 +228,7 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
   return (
     <div className="flex justify-start">
       <OnaAvatar />
-      <div className="min-w-0 flex-1 space-y-1.5 py-1">
+      <div className="min-w-0 flex-1 space-y-2 rounded-3xl rounded-tl-md border border-black/6 bg-white/70 px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
         {steps.map((step, i) => {
           const hasSubSteps = !!(step.subSteps && step.subSteps.length > 0);
           const hasReport = !!step.librarianReport;
@@ -398,11 +409,11 @@ function TodoPanel({ todos, onDismiss }: { todos: TodoItem[]; onDismiss: () => v
 
   return (
     <div
-      className="shrink-0 border-t border-gray-200 dark:border-gray-800 px-4 py-3 sm:px-8"
+      className="shrink-0 border-t border-black/6 px-4 py-3 dark:border-white/10 sm:px-8"
       style={{ backgroundColor: 'var(--bg)' }}
     >
       <div
-        className="mx-auto max-w-2xl rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3"
+        className="mx-auto max-w-3xl rounded-2xl border border-black/8 px-4 py-3 shadow-sm dark:border-white/10"
         style={{ backgroundColor: 'var(--bg-card)' }}
       >
         <div className="mb-2 flex items-center justify-between">
@@ -867,9 +878,8 @@ export default function AppPage() {
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
     const update = (e: MediaQueryListEvent | MediaQueryList) => {
-      const desktop = e.matches;
-      setIsMobile(!desktop);
-      setSidebarOpen(desktop);
+      setIsMobile(!e.matches);
+      setSidebarOpen(false);
     };
     update(mq);
     mq.addEventListener('change', update);
@@ -971,7 +981,18 @@ export default function AppPage() {
     setActiveId(c.id);
     setInput('');
     setPendingImage(null);
-    closeSidebarOnMobile();
+    setSidebarOpen(false);
+  }
+
+  function useSuggestion(prompt: string) {
+    setInput(prompt);
+    setTimeout(() => {
+      textareaRef.current?.focus();
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
+      }
+    }, 0);
   }
 
   async function deleteConversation(id: string, e: React.MouseEvent) {
@@ -1800,7 +1821,7 @@ export default function AppPage() {
                     }`}
                   >
                     <button
-                      onClick={() => { if (renamingId !== c.id) { setActiveId(c.id); closeSidebarOnMobile(); } }}
+                      onClick={() => { if (renamingId !== c.id) { setActiveId(c.id); setSidebarOpen(false); } }}
                       onDoubleClick={e => syncedIds.current.has(c.id) && startRenaming(c.id, c.title, e)}
                       className="min-w-0 flex-1 px-3 py-3 text-left"
                       aria-label={`Switch to task: ${c.title}`}
@@ -1862,30 +1883,45 @@ export default function AppPage() {
             })()}
       </div>
 
-      <div className="shrink-0 border-t border-black/8 dark:border-white/8 px-3 pb-3 pt-3 space-y-3">
-        <GitHubConnect />
-        <p className="text-xs text-gray-400 dark:text-gray-500">Powered by Claude Opus 4.6</p>
+      <div className="shrink-0 border-t border-black/8 px-3 pb-3 pt-3 dark:border-white/8">
+        <p className="text-xs text-gray-400 dark:text-gray-500">GitHub connection, theme, and new task controls are available in the top bar.</p>
       </div>
     </>
   );
 
   return (
-    <div className="flex flex-col" style={{ backgroundColor: 'var(--bg)', height: '100dvh' }}>
+    <div className="flex flex-col text-gray-950 dark:text-gray-50" style={{ backgroundColor: 'var(--bg)', height: '100dvh' }}>
       {/* ── Header ── */}
       <header
-        className="flex h-14 shrink-0 items-center justify-between border-b border-black/8 dark:border-white/8 px-4"
+        className="flex h-10 shrink-0 items-center justify-between border-b border-black/6 px-3 text-xs dark:border-white/8 sm:px-5"
         style={{ backgroundColor: 'var(--bg-header)', backdropFilter: 'blur(14px)' }}
       >
-        <Link href="/" className="min-w-0 shrink text-sm sm:text-base font-bold tracking-tight text-gray-950 dark:text-gray-50 truncate mr-2">
-          {APP_NAME}
+        <Link href="/" className="flex min-w-0 shrink items-center gap-2 font-semibold tracking-tight text-gray-950 dark:text-gray-50 truncate mr-2">
+          <span className="flex size-5 items-center justify-center rounded-full bg-gray-950 text-[10px] text-white dark:bg-gray-100 dark:text-gray-950">O</span>
+          <span className="hidden sm:inline">{APP_NAME}</span>
+          <span className="sm:hidden">ONA</span>
         </Link>
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 text-[11px] text-gray-500 dark:text-gray-400 md:flex">
+          <Link href="/app" className="transition-colors hover:text-gray-950 dark:hover:text-gray-100">Tasks</Link>
+          <button type="button" onClick={() => setSidebarOpen(true)} className="transition-colors hover:text-gray-950 dark:hover:text-gray-100">History</button>
+          <Link href="/" className="transition-colors hover:text-gray-950 dark:hover:text-gray-100">Home</Link>
+        </nav>
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <GitHubConnect />
           <ThemeToggle />
           <UserDropdown />
           <button
+            onClick={() => setSidebarOpen(o => !o)}
+            className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs text-gray-600 transition-colors hover:bg-black/5 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-white/8 dark:hover:text-gray-100"
+          >
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+              <path d="M3 3h8M3 7h8M3 11h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <span className="hidden sm:inline">History</span>
+          </button>
+          <button
             onClick={createNewChat}
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 sm:px-3 text-sm text-gray-600 dark:text-gray-400 transition-colors hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 active:bg-black/10"
+            className="flex items-center gap-1.5 rounded-full bg-gray-950 px-2.5 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-85 active:opacity-75 dark:bg-gray-100 dark:text-gray-950 sm:px-3"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -1894,6 +1930,9 @@ export default function AppPage() {
           </button>
         </div>
       </header>
+      <div className="shrink-0 border-b border-black/5 py-1.5 text-center text-[11px] text-gray-500 dark:border-white/8 dark:text-gray-400">
+        ONA runs background software engineering tasks and keeps working after you leave.
+      </div>
 
       {/* ── Body ── */}
       <div className="relative flex min-h-0 flex-1">
@@ -1904,17 +1943,14 @@ export default function AppPage() {
           <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
             {showEmptyPrompt
               ? (
-                  <div className="flex h-full flex-col items-center justify-center px-4 py-8 sm:px-8">
+                  <div className="flex h-full flex-col items-center justify-center px-0 py-8 sm:px-8">
                     <h1
-                      className="mb-3 text-2xl text-gray-900 dark:text-gray-100 sm:text-4xl text-center"
+                      className="mb-6 text-center text-3xl text-gray-900 dark:text-gray-100 sm:text-4xl"
                       style={{ fontFamily: SERIF, fontWeight: 400 }}
                     >
-                      {`What should Ona do?`}
+                      What can I do for you?
                     </h1>
-                    <p className="mb-7 max-w-xs text-sm text-gray-500 dark:text-gray-400 sm:max-w-sm text-center">
-                      Connect GitHub, describe a task, and a background agent can inspect repos, create a branch, commit changes, and open a pull request.
-                    </p>
-                    <div className="relative w-full max-w-4xl">
+                    <div className="relative w-full max-w-2xl">
                       {/* @ mention file picker */}
                       {atMention && (
                         <div
@@ -1974,18 +2010,13 @@ export default function AppPage() {
                       )}
                       {/* Model selector */}
                       {(() => {
-                        const MODEL_OPTIONS = [
-                          { key: 'ona-max', label: 'ONA Max' },
-                          { key: 'ona-max-fast', label: 'ONA Max Fast' },
-                          { key: 'ona-mini', label: 'ONA Mini' },
-                        ] as const;
                         const current = MODEL_OPTIONS.find(m => m.key === selectedModel) ?? MODEL_OPTIONS[1];
                         return (
-                          <div ref={modelMenuRef} className="relative mb-1.5 flex">
+                          <div ref={modelMenuRef} className="relative mb-2 flex justify-start">
                             <button
                               type="button"
                               onClick={() => setModelMenuOpen(o => !o)}
-                              className="flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1 text-xs text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                              className="flex items-center gap-1.5 rounded-full border border-black/8 bg-white/80 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200"
                             >
                               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0 text-indigo-500">
                                 <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.4" />
@@ -1997,13 +2028,13 @@ export default function AppPage() {
                               </svg>
                             </button>
                             {modelMenuOpen && (
-                              <div className="absolute bottom-full left-0 mb-1.5 z-50 w-52 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-2)' }}>
+                              <div className="absolute bottom-full left-0 mb-1.5 z-50 w-52 overflow-hidden rounded-2xl border border-black/8 shadow-lg dark:border-white/10" style={{ backgroundColor: 'var(--bg-card)' }}>
                                 {MODEL_OPTIONS.map(opt => (
                                   <button
                                     key={opt.key}
                                     type="button"
                                     onClick={() => { setSelectedModel(opt.key); setModelMenuOpen(false); }}
-                                    className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 ${selectedModel === opt.key ? 'bg-gray-50 dark:bg-gray-800/60' : ''}`}
+                                    className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/8 ${selectedModel === opt.key ? 'bg-black/5 dark:bg-white/8' : ''}`}
                                   >
                                     <span>
                                       <span className="block text-xs font-medium text-gray-900 dark:text-gray-100">{opt.label}</span>
@@ -2021,19 +2052,17 @@ export default function AppPage() {
                         );
                       })()}
                       <div
-                        className="flex min-h-24 sm:min-h-36 items-end gap-2 sm:gap-3 rounded-2xl sm:rounded-3xl border border-gray-300 dark:border-gray-700 px-3 sm:px-4 py-3 sm:py-4 transition-shadow focus-within:border-gray-400 dark:focus-within:border-gray-500 focus-within:shadow-sm"
+                        className="flex min-h-24 items-end gap-2 rounded-[1.75rem] border border-black/10 px-3 py-3 shadow-sm transition-shadow focus-within:border-black/20 focus-within:shadow-md dark:border-white/10 dark:focus-within:border-white/20 sm:min-h-32 sm:gap-3 sm:px-4 sm:py-4"
                         style={{ backgroundColor: 'var(--bg-input)' }}
                       >
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-xl text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800"
+                          className="flex size-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 active:bg-black/8 dark:text-gray-500 dark:hover:bg-white/8 dark:hover:text-gray-300 sm:size-10"
                           aria-label="Attach image"
                         >
                           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-                            <circle cx="5.5" cy="6" r="1.25" stroke="currentColor" strokeWidth="1.3" />
-                            <path d="M1.5 11l3.5-3 2.5 2.5 2-2 4.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M8 3.25v9.5M3.25 8h9.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                           </svg>
                         </button>
                         <input suppressHydrationWarning ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
@@ -2044,7 +2073,7 @@ export default function AppPage() {
                           onChange={autoResize}
                           onKeyDown={handleKey}
                           onPaste={handlePaste}
-                          placeholder="Describe a task for your agent…"
+                          placeholder="Assign a task or ask anything"
                           className="min-h-16 sm:min-h-28 flex-1 resize-none bg-transparent py-1.5 sm:py-2 text-sm sm:text-base text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
                           style={{ maxHeight: '180px' }}
                         />
@@ -2083,14 +2112,26 @@ export default function AppPage() {
                           </button>
                         )}
                       </div>
-                      <p className="mt-2 hidden text-center text-xs text-gray-400 dark:text-gray-500 sm:block">
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                        {PROMPT_SUGGESTIONS.map(suggestion => (
+                          <button
+                            key={suggestion.label}
+                            type="button"
+                            onClick={() => useSuggestion(suggestion.prompt)}
+                            className="rounded-full border border-black/8 bg-white/70 px-3 py-1.5 text-xs text-gray-600 shadow-sm transition-colors hover:border-black/20 hover:text-gray-950 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-100"
+                          >
+                            {suggestion.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-3 hidden text-center text-xs text-gray-400 dark:text-gray-500 sm:block">
                         Enter to send · Shift+Enter for new line · paste images · type @ to reference sandbox files
                       </p>
                     </div>
                   </div>
                 )
               : (
-                  <div ref={messagesContentRef} className="space-y-5">
+                  <div ref={messagesContentRef} className="mx-auto max-w-3xl space-y-5">
                     {messages
                       .filter(m => m.role === 'tool_steps' || m.role === 'user' || !!m.content)
                       .map(msg => (
@@ -2114,8 +2155,8 @@ export default function AppPage() {
 
           {/* ── Input bar (shown only when there are messages) ── */}
           {!showEmptyPrompt && (
-            <div className="shrink-0 border-t border-gray-200 dark:border-gray-800 px-3 py-3 sm:px-6 sm:py-4">
-              <div className="relative">
+            <div className="shrink-0 border-t border-black/6 px-3 py-3 dark:border-white/10 sm:px-6 sm:py-4">
+              <div className="relative mx-auto max-w-3xl">
                 {/* @ mention file picker */}
                 {atMention && (
                   <div
@@ -2176,18 +2217,13 @@ export default function AppPage() {
 
                 {/* Model selector */}
                 {(() => {
-                  const MODEL_OPTIONS = [
-                    { key: 'ona-max', label: 'ONA Max' },
-                    { key: 'ona-max-fast', label: 'ONA Max Fast' },
-                    { key: 'ona-mini', label: 'ONA Mini' },
-                  ] as const;
                   const current = MODEL_OPTIONS.find(m => m.key === selectedModel) ?? MODEL_OPTIONS[1];
                   return (
                     <div ref={modelMenuRef} className="relative mb-1.5 flex">
                       <button
                         type="button"
                         onClick={() => setModelMenuOpen(o => !o)}
-                        className="flex items-center gap-1.5 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 py-1 text-xs text-gray-600 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+                      className="flex items-center gap-1.5 rounded-full border border-black/8 bg-white/80 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200"
                       >
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0 text-indigo-500">
                           <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.4" />
@@ -2199,13 +2235,13 @@ export default function AppPage() {
                         </svg>
                       </button>
                       {modelMenuOpen && (
-                        <div className="absolute bottom-full left-0 mb-1.5 z-50 w-52 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-2)' }}>
+                        <div className="absolute bottom-full left-0 mb-1.5 z-50 w-52 overflow-hidden rounded-2xl border border-black/8 shadow-lg dark:border-white/10" style={{ backgroundColor: 'var(--bg-card)' }}>
                           {MODEL_OPTIONS.map(opt => (
                             <button
                               key={opt.key}
                               type="button"
                               onClick={() => { setSelectedModel(opt.key); setModelMenuOpen(false); }}
-                              className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 ${selectedModel === opt.key ? 'bg-gray-50 dark:bg-gray-800/60' : ''}`}
+                              className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/8 ${selectedModel === opt.key ? 'bg-black/5 dark:bg-white/8' : ''}`}
                             >
                               <span>
                                 <span className="block text-xs font-medium text-gray-900 dark:text-gray-100">{opt.label}</span>
@@ -2224,19 +2260,17 @@ export default function AppPage() {
                 })()}
 
                 <div
-                  className="flex items-end gap-2 rounded-2xl border border-gray-300 dark:border-gray-700 px-3 py-2 sm:py-2.5 transition-shadow focus-within:border-gray-400 dark:focus-within:border-gray-500 focus-within:shadow-sm"
+                  className="flex items-end gap-2 rounded-[1.5rem] border border-black/10 px-3 py-2 shadow-sm transition-shadow focus-within:border-black/20 focus-within:shadow-md dark:border-white/10 dark:focus-within:border-white/20 sm:py-2.5"
                   style={{ backgroundColor: 'var(--bg-input)' }}
                 >
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex size-9 sm:size-11 shrink-0 items-center justify-center rounded-lg text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 active:bg-gray-100 dark:active:bg-gray-800"
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-black/5 hover:text-gray-700 active:bg-black/8 dark:text-gray-500 dark:hover:bg-white/8 dark:hover:text-gray-300 sm:size-11"
                     aria-label="Attach image"
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-                      <circle cx="5.5" cy="6" r="1.25" stroke="currentColor" strokeWidth="1.3" />
-                      <path d="M1.5 11l3.5-3 2.5 2.5 2-2 4.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M8 3.25v9.5M3.25 8h9.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                     </svg>
                   </button>
                   <input suppressHydrationWarning ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
@@ -2247,7 +2281,7 @@ export default function AppPage() {
                     onChange={autoResize}
                     onKeyDown={handleKey}
                     onPaste={handlePaste}
-                    placeholder="Describe a task for your agent…"
+                    placeholder="Assign a follow-up task or ask anything"
                     className="flex-1 resize-none bg-transparent py-2 sm:py-3 text-sm sm:text-base text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 outline-none"
                     style={{ maxHeight: '180px' }}
                   />
@@ -2405,6 +2439,40 @@ export default function AppPage() {
           })()}
         </div>
       </div>
+
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px] dark:bg-black/45"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close history"
+        />
+      )}
+      <aside
+        className={`fixed right-0 top-0 z-50 flex h-[100dvh] w-full max-w-sm flex-col border-l border-black/8 shadow-2xl transition-transform duration-200 dark:border-white/10 sm:w-96 ${
+          sidebarOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        style={{ backgroundColor: 'var(--bg-sidebar)' }}
+        aria-hidden={!sidebarOpen}
+      >
+        <div className="flex h-12 shrink-0 items-center justify-between border-b border-black/8 px-4 dark:border-white/10">
+          <div>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Task history</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Search, rename, or delete tasks</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="flex size-8 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/8 dark:hover:text-gray-100"
+            aria-label="Close history"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        {sidebarContent}
+      </aside>
 
       {/* ── Sandbox ready toast ── */}
       {sandboxToastId && (

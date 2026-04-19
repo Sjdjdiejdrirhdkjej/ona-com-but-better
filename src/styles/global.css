@@ -6,26 +6,26 @@
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  --bg: #e4e4cb;
-  --bg-2: #d7d7be;
-  --bg-3: #cacaaf;
-  --bg-sidebar: #dcdcc3;
-  --bg-header: rgba(228, 228, 203, 0.88);
-  --bg-card: rgba(244, 244, 223, 0.92);
+  --bg: #fbfbfa;
+  --bg-2: #f3f3f1;
+  --bg-3: #ececea;
+  --bg-sidebar: #f6f6f4;
+  --bg-header: rgba(251, 251, 250, 0.86);
+  --bg-card: rgba(255, 255, 255, 0.92);
   --bg-input: #fff;
-  --bg-logo: #c2c2a7;
+  --bg-logo: #111;
   color-scheme: light;
 }
 
 .dark {
-  --bg: #0f0f0e;
-  --bg-2: #1c1b19;
-  --bg-3: #252422;
-  --bg-sidebar: #181715;
-  --bg-header: rgba(15,15,14,0.88);
-  --bg-card: rgba(32,31,29,0.92);
-  --bg-input: #1e1d1b;
-  --bg-logo: #3a3936;
+  --bg: #101010;
+  --bg-2: #181818;
+  --bg-3: #222;
+  --bg-sidebar: #151515;
+  --bg-header: rgba(16,16,16,0.86);
+  --bg-card: rgba(24,24,24,0.92);
+  --bg-input: #191919;
+  --bg-logo: #f5f5f5;
   color-scheme: dark;
 }
 

@@ -307,7 +307,7 @@ export function GitHubConnect() {
                 onClick={startDeviceFlow}
                 disabled={status.type === 'loading' || status.type === 'checking'}
                 title="Connect GitHub"
-                className="flex sm:hidden size-9 items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 transition-colors hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
+                className="flex sm:hidden size-8 items-center justify-center rounded-full text-gray-500 dark:text-gray-400 transition-colors hover:bg-black/6 dark:hover:bg-white/8 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
               >
                 {GH_ICON}
               </button>
@@ -315,7 +315,7 @@ export function GitHubConnect() {
               <button
                 onClick={startDeviceFlow}
                 disabled={status.type === 'loading' || status.type === 'checking'}
-                className="hidden sm:flex items-center gap-2 rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 transition-colors hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
+                className="hidden sm:flex items-center gap-2 rounded-full border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 transition-colors hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
                 style={{ backgroundColor: 'var(--bg-card)' }}
               >
                 {GH_ICON}

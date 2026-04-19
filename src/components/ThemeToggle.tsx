@@ -24,7 +24,7 @@ export function ThemeToggle() {
     <button
       onClick={toggle}
       aria-label="Toggle color theme"
-      className="flex size-8 items-center justify-center rounded-md text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/8"
+      className="flex size-8 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/8"
     >
       {mounted
         ? dark

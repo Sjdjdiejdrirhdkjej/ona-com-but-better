@@ -48,10 +48,10 @@ An open-source platform for AI background software engineering agents. The landi
 
 ## Design Constants
 - Landing page direction: ampcode.com-inspired editorial layout with pale grid background, oversized serif typography, thin divider lines, compact black CTAs, and terminal-style dark visual panels while preserving existing ONA copy
-- Background: `#e4e4cb`
+- `/app` direction: Manus.im-inspired task prompt UI with a near-white canvas, compact navigation, centered serif hero headline, large rounded prompt composer, small announcement strip, pill suggestion actions, and a restrained gray/black palette while preserving ONA identity and existing capabilities
+- App background: `#fbfbfa` light, `#101010` dark
 - Serif font: `Georgia, "Times New Roman", serif`
-- Dark navy (announcement bar): `#18182a`
-- Agent avatar gradient: `linear-gradient(135deg,#7b68ee,#9370db)`
+- Agent/avatar mark: solid foreground via `--bg-logo`
 
 ## Chat Interface (/app)
 - Real streaming AI responses via `src/app/api/chat/route.ts`
@@ -61,6 +61,7 @@ An open-source platform for AI background software engineering agents. The landi
 - System prompt positions ONA but OPEN SOURCE as a background software engineering agent platform
 - GitHub tools support branch creation, file writes on feature branches, and pull request creation; `src/libs/GitHub.ts` prevents accidental direct writes to the default branch.
 - Suggestion chips: Inspect repos, Clone a repo, Review PRs, Find CVEs
+- `/app` task history remains available via the top History control and the collapsible Past tasks tray; both support search/switching, and persisted conversations can be renamed/deleted
 - Librarian research tasks are handled by `src/libs/Librarian.ts` as an autonomous source-grounded research analyst with a longer research loop and detailed implementation-ready reports
 - Browser automation tasks are handled by `src/libs/BrowserUse.ts` — the Browser Use Expert subagent uses Firecrawl's cloud-hosted browser (full JS rendering) to navigate, click, fill forms, scroll, screenshot, and extract data from live websites. Invoked via `call_browser_use` tool — internal tools (`browse`, `screenshot`, `search_web`) are never exposed to the main AI. Model overridable via `FIREWORKS_BROWSER_MODEL` env var.
 
