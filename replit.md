@@ -64,6 +64,7 @@ An open-source platform for AI background software engineering agents. The landi
 - `/app` task history remains available via the top History control and the collapsible Past tasks tray; both support search/switching, and persisted conversations can be renamed/deleted
 - Librarian research tasks are handled by `src/libs/Librarian.ts` as an autonomous source-grounded research analyst with a longer research loop and detailed implementation-ready reports
 - Browser automation tasks are handled by `src/libs/BrowserUse.ts` — the Browser Use Expert subagent uses Firecrawl's cloud-hosted browser (full JS rendering) to navigate, click, fill forms, scroll, screenshot, and extract data from live websites. Invoked via `call_browser_use` tool — internal tools (`browse`, `screenshot`, `search_web`) are never exposed to the main AI. Model overridable via `FIREWORKS_BROWSER_MODEL` env var.
+- File-edit tool steps now attach touched-file metadata with unified diffs for `sandbox_write_file`, `github_upsert_file`, and `github_delete_file`. The `/app` tool-step block renders a collapsible diff panel so users can inspect files changed by the AI.
 
 ## Background Agent System
 - **Persistent tool steps**: Tool call batches (e.g., "Reading file", "Creating branch") are saved as `tool_steps` messages in the DB and rendered permanently in the conversation — they never disappear

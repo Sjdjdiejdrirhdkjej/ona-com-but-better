@@ -1,4 +1,5 @@
 import { Daytona } from '@daytonaio/sdk';
+import { createFileDiff } from '@/libs/FileDiff';
 
 const DAYTONA_API_KEY = process.env.DAYTONA_API_KEY;
 
@@ -187,12 +188,19 @@ export async function runDaytonaTool(name: string, args: Record<string, unknown>
     const content = String(args.content ?? '');
 
     const sandbox = await daytona.get(sandboxId);
+    let previousContent: string | null = null;
+    try {
+      const previous = await sandbox.fs.downloadFile(filePath);
+      previousContent = Buffer.isBuffer(previous) ? previous.toString('utf8') : String(previous ?? '');
+    } catch {
+      previousContent = null;
+    }
     await sandbox.fs.uploadFile(
       Buffer.from(content),
       filePath,
     );
 
-    return { path: filePath, bytes_written: content.length };
+    return { path: filePath, bytes_written: content.length, touchedFiles: [createFileDiff(filePath, previousContent, content)] };
   }
 
   if (name === 'sandbox_read_file') {

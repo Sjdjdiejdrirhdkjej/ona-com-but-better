@@ -8,6 +8,7 @@ import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/Git
 import { daytonaToolDefinitions, isDaytonaTool, prebootSandbox, runDaytonaTool } from '@/libs/Daytona';
 import { callLibrarianToolDefinition, isCallLibrarianTool, runLibrarianSubagent } from '@/libs/Librarian';
 import { callBrowserUseToolDefinition, isCallBrowserUseTool, runBrowserUseSubagent } from '@/libs/BrowserUse';
+import type { TouchedFileDiff } from '@/libs/FileDiff';
 
 export const runtime = 'nodejs';
 
@@ -16,6 +17,18 @@ const FIREWORKS_API_URL = 'https://api.fireworks.ai/inference/v1/chat/completion
 // ── Ultrawork todo types ────────────────────────────────────────────────────
 type TodoStatus = 'pending' | 'in_progress' | 'done';
 type TodoItem = { id: string; task: string; status: TodoStatus };
+type ToolStepUpdate = { label: string; status: string; touchedFiles?: TouchedFileDiff[] };
+
+function getTouchedFiles(result: unknown): TouchedFileDiff[] | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const files = (result as { touchedFiles?: unknown }).touchedFiles;
+  if (!Array.isArray(files)) return undefined;
+  const normalized = files.filter((file): file is TouchedFileDiff => {
+    const item = file as Partial<TouchedFileDiff>;
+    return typeof item.path === 'string' && typeof item.diff === 'string';
+  });
+  return normalized.length > 0 ? normalized : undefined;
+}
 
 const TODO_WRITE_TOOL = {
   type: 'function',
@@ -964,7 +977,7 @@ export async function POST(req: NextRequest) {
           if (jobId) await persistJobEvent(jobId, 'tool_call', { tools: labels, toolStepsMsgId, nextAssistantMsgId });
 
           conversation.push({ role: 'assistant', content: content ?? '', tool_calls: toolCalls });
-          const toolSteps: Array<{ label: string; status: string }> = labels.map(l => ({ label: l, status: 'running' }));
+          const toolSteps: ToolStepUpdate[] = labels.map(l => ({ label: l, status: 'running' }));
 
           await Promise.all(toolCalls.map(async (toolCall) => {
             const toolName = toolCall.function.name;
@@ -1015,9 +1028,13 @@ export async function POST(req: NextRequest) {
               }
               conversation.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result).slice(0, 32000) });
               const idx = toolSteps.findIndex(s => s.label === label);
-              if (idx !== -1) toolSteps[idx]!.status = 'done';
-              emit({ type: 'tool_complete', tool: label });
-              if (jobId) await persistJobEvent(jobId, 'tool_complete', { tool: label });
+              const touchedFiles = getTouchedFiles(result);
+              if (idx !== -1) {
+                toolSteps[idx]!.status = 'done';
+                if (touchedFiles) toolSteps[idx]!.touchedFiles = touchedFiles;
+              }
+              emit({ type: 'tool_complete', tool: label, touchedFiles });
+              if (jobId) await persistJobEvent(jobId, 'tool_complete', { tool: label, touchedFiles });
             } catch (error) {
               conversation.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ error: (error as Error).message }) });
               const idx = toolSteps.findIndex(s => s.label === label);
@@ -1222,7 +1239,7 @@ export async function POST(req: NextRequest) {
 
         conversation.push({ role: 'assistant', content: content ?? '', tool_calls: toolCalls });
 
-        const toolSteps: Array<{ label: string; status: string }> = labels.map(l => ({ label: l, status: 'running' }));
+        const toolSteps: ToolStepUpdate[] = labels.map(l => ({ label: l, status: 'running' }));
 
         await Promise.all(
           toolCalls.map(async (toolCall) => {
@@ -1296,9 +1313,13 @@ export async function POST(req: NextRequest) {
               }
               conversation.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result).slice(0, 32000) });
               const idx = toolSteps.findIndex(s => s.label === label);
-              if (idx !== -1) toolSteps[idx]!.status = 'done';
-              emit({ type: 'tool_complete', tool: label });
-              if (jobId) await persistJobEvent(jobId, 'tool_complete', { tool: label });
+              const touchedFiles = getTouchedFiles(result);
+              if (idx !== -1) {
+                toolSteps[idx]!.status = 'done';
+                if (touchedFiles) toolSteps[idx]!.touchedFiles = touchedFiles;
+              }
+              emit({ type: 'tool_complete', tool: label, touchedFiles });
+              if (jobId) await persistJobEvent(jobId, 'tool_complete', { tool: label, touchedFiles });
             } catch (error) {
               conversation.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ error: (error as Error).message }) });
               const idx = toolSteps.findIndex(s => s.label === label);

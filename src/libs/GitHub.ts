@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { createFileDiff } from '@/libs/FileDiff';
 
 const execFileAsync = promisify(execFile);
 const GITHUB_API = 'https://api.github.com';
@@ -83,6 +84,21 @@ async function readFileSha(token: string, owner: string, repo: string, filePath:
   try {
     const file = await githubFetch<{ sha?: string }>(token, `${repoPath(owner, repo)}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(branch)}`);
     return file.sha;
+  } catch (error) {
+    if ((error as Error).message.toLowerCase().includes('not found')) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function readFileContent(token: string, owner: string, repo: string, filePath: string, branch: string) {
+  try {
+    const file = await githubFetch<{ content?: string; encoding?: string }>(token, `${repoPath(owner, repo)}/contents/${encodePath(filePath)}?ref=${encodeURIComponent(branch)}`);
+    if (file.encoding === 'base64' && typeof file.content === 'string') {
+      return Buffer.from(file.content.replace(/\n/g, ''), 'base64').toString('utf8');
+    }
+    return undefined;
   } catch (error) {
     if ((error as Error).message.toLowerCase().includes('not found')) {
       return undefined;
@@ -734,10 +750,15 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
     if (!filePath || !branch || !message) throw new Error('path, branch, and message are required.');
     await assertWritableBranch(token, owner, repo, branch, args.allowDirectPushToDefaultBranch);
     const sha = await readFileSha(token, owner, repo, filePath, branch);
-    return githubFetch(token, `${repoPath(owner, repo)}/contents/${encodePath(filePath)}`, {
+    const previousContent = await readFileContent(token, owner, repo, filePath, branch);
+    const response = await githubFetch(token, `${repoPath(owner, repo)}/contents/${encodePath(filePath)}`, {
       method: 'PUT',
       body: JSON.stringify({ message, content: Buffer.from(content, 'utf8').toString('base64'), branch, ...(sha ? { sha } : {}) }),
     });
+    return {
+      ...(response && typeof response === 'object' ? response as Record<string, unknown> : { response }),
+      touchedFiles: [createFileDiff(filePath, previousContent ?? null, content)],
+    };
   }
 
   if (name === 'github_delete_file') {
@@ -748,10 +769,15 @@ export async function runGitHubTool(token: string, name: string, args: Record<st
     await assertWritableBranch(token, owner, repo, branch, args.allowDirectPushToDefaultBranch);
     const sha = await readFileSha(token, owner, repo, filePath, branch);
     if (!sha) throw new Error(`File not found: ${filePath} on branch ${branch}`);
-    return githubFetch(token, `${repoPath(owner, repo)}/contents/${encodePath(filePath)}`, {
+    const previousContent = await readFileContent(token, owner, repo, filePath, branch);
+    const response = await githubFetch(token, `${repoPath(owner, repo)}/contents/${encodePath(filePath)}`, {
       method: 'DELETE',
       body: JSON.stringify({ message, sha, branch }),
     });
+    return {
+      ...(response && typeof response === 'object' ? response as Record<string, unknown> : { response }),
+      touchedFiles: [createFileDiff(filePath, previousContent ?? '', null)],
+    };
   }
 
   if (name === 'github_list_pull_requests') {

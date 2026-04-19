@@ -45,6 +45,14 @@ type ToolStep = {
   subSteps?: SubStep[];
   librarianReport?: string;
   browserReport?: string;
+  touchedFiles?: TouchedFileDiff[];
+};
+
+type TouchedFileDiff = {
+  path: string;
+  status: 'created' | 'modified' | 'deleted';
+  diff: string;
+  truncated?: boolean;
 };
 
 type Message = {
@@ -204,6 +212,52 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
+function DiffLine({ line }: { line: string }) {
+  const tone = line.startsWith('+') && !line.startsWith('+++')
+    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+    : line.startsWith('-') && !line.startsWith('---')
+      ? 'bg-red-500/10 text-red-700 dark:text-red-300'
+      : line.startsWith('@@')
+        ? 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
+        : 'text-gray-600 dark:text-gray-400';
+
+  return (
+    <div className={`whitespace-pre px-3 py-0.5 font-mono text-[11px] leading-5 ${tone}`}>
+      {line || ' '}
+    </div>
+  );
+}
+
+function DiffPanel({ files }: { files: TouchedFileDiff[] }) {
+  return (
+    <div className="mt-2 ml-4 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950/40">
+      <div className="border-b border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">
+        Files changed
+      </div>
+      <div className="max-h-96 overflow-auto">
+        {files.map(file => (
+          <div key={`${file.path}:${file.status}`} className="border-b border-gray-200 last:border-b-0 dark:border-gray-800">
+            <div className="flex items-center justify-between gap-3 bg-white/60 px-3 py-2 dark:bg-white/5">
+              <span className="truncate font-mono text-xs text-gray-700 dark:text-gray-300">{file.path}</span>
+              <span className="shrink-0 rounded-full border border-gray-200 px-2 py-0.5 text-[10px] uppercase tracking-wide text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                {file.status}
+              </span>
+            </div>
+            <div>
+              {file.diff.split('\n').map((line, index) => (
+                <DiffLine key={index} line={line} />
+              ))}
+            </div>
+            {file.truncated && (
+              <div className="px-3 py-2 text-[11px] text-gray-400 dark:text-gray-500">Diff truncated</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
   const [expandedLabels, setExpandedLabels] = useState<Set<string>>(new Set());
   const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
@@ -234,9 +288,11 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
           const hasSubSteps = !!(step.subSteps && step.subSteps.length > 0);
           const hasReport = !!step.librarianReport;
           const hasBrowserReport = !!step.browserReport;
+          const hasDiff = !!(step.touchedFiles && step.touchedFiles.length > 0);
           const isOpen = expandedLabels.has(step.label) || (step.status === 'running' && hasSubSteps);
           const isReportOpen = expandedReports.has(step.label);
           const isBrowserReportOpen = expandedReports.has(`${step.label}::browser`);
+          const isDiffOpen = expandedReports.has(`${step.label}::diff`);
           return (
             <div key={i}>
               <div className="flex items-center gap-2 flex-wrap">
@@ -273,6 +329,17 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
                       <path d="M1.5 2h7M1.5 5h7M1.5 8h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
                     </svg>
                     {isReportOpen ? 'Hide report' : 'View report'}
+                  </button>
+                )}
+                {hasDiff && (
+                  <button
+                    onClick={() => toggleReport(`${step.label}::diff`)}
+                    className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-emerald-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 2.5h6M2 5h6M2 7.5h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    </svg>
+                    {isDiffOpen ? 'Hide diff' : `${step.touchedFiles!.length} diff${step.touchedFiles!.length === 1 ? '' : 's'}`}
                   </button>
                 )}
                 {hasBrowserReport && (
@@ -315,6 +382,9 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
                 <div className="mt-2 ml-4 rounded-xl border border-indigo-100 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
                   <AssistantMarkdownLazy text={step.librarianReport!} />
                 </div>
+              )}
+              {hasDiff && isDiffOpen && (
+                <DiffPanel files={step.touchedFiles!} />
               )}
               {hasBrowserReport && isBrowserReportOpen && (
                 <div className="mt-2 ml-4 rounded-xl border border-sky-100 dark:border-sky-900/60 bg-sky-50/60 dark:bg-sky-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
@@ -746,7 +816,8 @@ export default function AppPage() {
             } else if (ev.type === 'tool_complete') {
               const tool = ev.data.tool as string;
               const hasError = !!ev.data.error;
-              messages = applyStepUpdate(messages, s => s.label === tool, s => ({ ...s, status: (hasError ? 'error' : 'done') as ToolStep['status'] }));
+              const touchedFiles = Array.isArray(ev.data.touchedFiles) ? ev.data.touchedFiles as TouchedFileDiff[] : undefined;
+              messages = applyStepUpdate(messages, s => s.label === tool, s => ({ ...s, status: (hasError ? 'error' : 'done') as ToolStep['status'], ...(touchedFiles ? { touchedFiles } : {}) }));
             } else if (ev.type === 'tool_done') {
               messages = messages.map(m =>
                 m.role === 'tool_steps'
@@ -1243,6 +1314,7 @@ export default function AppPage() {
               report?: string;
               todos?: TodoItem[];
               sandbox_id?: string;
+              touchedFiles?: TouchedFileDiff[];
               credits?: number;
             };
 
@@ -1321,7 +1393,7 @@ export default function AppPage() {
                           ...m,
                           content: (m.content as ToolStep[]).map(s =>
                             s.label === tool
-                              ? { ...s, status: (hasError ? 'error' : 'done') as ToolStep['status'] }
+                              ? { ...s, status: (hasError ? 'error' : 'done') as ToolStep['status'], ...(json.touchedFiles ? { touchedFiles: json.touchedFiles } : {}) }
                               : s,
                           ),
                         }
