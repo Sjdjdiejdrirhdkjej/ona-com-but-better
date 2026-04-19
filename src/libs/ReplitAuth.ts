@@ -87,9 +87,18 @@ function isLocalHost(host: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0' || hostname === '::1';
 }
 
+function isReplitHost(host: string): boolean {
+  const hostname = host.split(':')[0]?.toLowerCase();
+  return !!hostname && (
+    hostname.endsWith('.replit.dev')
+    || hostname.endsWith('.repl.co')
+    || hostname.endsWith('.replit.app')
+  );
+}
+
 function isAllowedHost(host: string): boolean {
   const normalizedHost = host.toLowerCase();
-  return isLocalHost(normalizedHost) || getConfiguredHosts().has(normalizedHost);
+  return isLocalHost(normalizedHost) || isReplitHost(normalizedHost) || getConfiguredHosts().has(normalizedHost);
 }
 
 export function getAppBaseUrl(request?: Request): string {

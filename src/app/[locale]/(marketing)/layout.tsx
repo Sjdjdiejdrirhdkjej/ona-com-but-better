@@ -57,6 +57,7 @@ export default async function Layout(props: {
           <a
             href={loginHref}
             target="_top"
+            rel="noreferrer"
             className="rounded-md border border-gray-900 px-3 py-1.5 text-gray-900 transition-colors hover:bg-gray-900 hover:text-white"
           >
             Get Started

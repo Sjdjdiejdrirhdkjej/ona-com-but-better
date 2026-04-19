@@ -63,3 +63,39 @@ export function observeElementSize(element: Element, onResize: () => void): () =
 
   return () => window.removeEventListener('resize', onResize);
 }
+
+export function getSafeBrowserReturnPath(returnTo: string | null | undefined, fallback = '/app'): string {
+  if (!returnTo || typeof window === 'undefined') {
+    return fallback;
+  }
+
+  try {
+    const parsed = new URL(returnTo, window.location.origin);
+
+    if (parsed.origin !== window.location.origin || parsed.pathname.startsWith('/api/')) {
+      return fallback;
+    }
+
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
+export function navigateTopLevel(destination: string, mode: 'assign' | 'replace' = 'assign') {
+  const targetUrl = new URL(destination, window.location.origin).toString();
+  const navigate = mode === 'replace' ? 'replace' : 'assign';
+
+  try {
+    if (window.top && window.top !== window.self) {
+      window.top.location[navigate](targetUrl);
+      return;
+    }
+  } catch {}
+
+  try {
+    window.location[navigate](targetUrl);
+  } catch {
+    window.location.href = targetUrl;
+  }
+}

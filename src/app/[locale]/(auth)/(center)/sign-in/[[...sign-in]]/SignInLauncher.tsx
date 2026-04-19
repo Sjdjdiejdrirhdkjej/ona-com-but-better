@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getSafeBrowserReturnPath, navigateTopLevel } from '@/utils/browserCompat';
 
 type SignInLauncherProps = {
   autoStart: boolean;
@@ -13,17 +14,7 @@ export function SignInLauncher({ autoStart, href, label, returnTo }: SignInLaunc
   const [isStarting, setIsStarting] = useState(autoStart);
 
   function startAuth() {
-    const destination = new URL(href, window.location.origin).toString();
-
-    try {
-      if (window.top && window.top !== window.self) {
-        window.top.location.assign(destination);
-        return;
-      }
-    } catch {
-    }
-
-    window.location.assign(destination);
+    navigateTopLevel(href);
   }
 
   useEffect(() => {
@@ -33,8 +24,11 @@ export function SignInLauncher({ autoStart, href, label, returnTo }: SignInLaunc
       }
 
       if (event.data?.type === 'ona-auth-complete') {
-        const nextPath = typeof event.data.returnTo === 'string' ? event.data.returnTo : returnTo;
-        window.location.assign(nextPath);
+        const nextPath = getSafeBrowserReturnPath(
+          typeof event.data.returnTo === 'string' ? event.data.returnTo : returnTo,
+          returnTo,
+        );
+        navigateTopLevel(nextPath);
       }
     }
 
@@ -55,6 +49,7 @@ export function SignInLauncher({ autoStart, href, label, returnTo }: SignInLaunc
     <a
       href={href}
       target="_top"
+      rel="noreferrer"
       onClick={(event) => {
         event.preventDefault();
         setIsStarting(true);

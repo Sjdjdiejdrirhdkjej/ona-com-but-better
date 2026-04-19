@@ -77,13 +77,17 @@ function authCompleteResponse(baseUrl: string, returnTo: string) {
       return !isMobileBrowser && window.opener && !window.opener.closed;
     }
 
-    navigateCurrentTab();
-
     try {
       if (canUseDesktopPopupHandoff()) {
         window.opener.postMessage({ type: 'ona-auth-complete', returnTo }, origin);
+        window.close();
+        window.setTimeout(navigateCurrentTab, 300);
+      } else {
+        navigateCurrentTab();
       }
-    } catch {}
+    } catch {
+      navigateCurrentTab();
+    }
 
   </script>
 </body>

@@ -69,6 +69,7 @@ export function MobileMenu() {
               <a
                 href={loginHref}
                 target="_top"
+                rel="noreferrer"
                 onClick={() => setOpen(false)}
                 className="rounded-md bg-gray-950 dark:bg-gray-100 dark:text-gray-900 px-3 py-2.5 text-center text-base font-medium text-white transition-opacity hover:opacity-80"
               >
