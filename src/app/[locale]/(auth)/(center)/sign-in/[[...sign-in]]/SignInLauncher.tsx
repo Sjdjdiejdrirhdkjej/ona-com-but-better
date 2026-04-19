@@ -25,6 +25,7 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
   const [handoffError, setHandoffError] = useState<string | null>(errorMessage || null);
   const attemptsRef = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const handoffHref = href.includes('?') ? `${href}&handoff=1` : `${href}?handoff=1`;
 
   const clearPendingCheck = useCallback(() => {
     if (timeoutRef.current) {
@@ -90,7 +91,7 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
 
     try {
       authWindow.opener = null;
-      authWindow.location.replace(href);
+      authWindow.location.replace(handoffHref);
       authWindow.focus();
     } catch {
       setStatus('blocked');
@@ -226,7 +227,7 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
           {(status === 'blocked' || status === 'timeout' || status === 'failed') && (
             <>
               <a
-                href={href}
+                href={handoffHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={startWaiting}
