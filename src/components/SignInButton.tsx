@@ -2,11 +2,15 @@
 
 import { signIn } from '@/libs/auth-client';
 
-export function SignInButton() {
+type SignInButtonProps = {
+  returnTo?: string;
+};
+
+export function SignInButton({ returnTo = '/app' }: SignInButtonProps) {
   return (
     <button
       type="button"
-      onClick={() => signIn()}
+      onClick={() => signIn(returnTo)}
       style={{
         display: 'flex',
         alignItems: 'center',

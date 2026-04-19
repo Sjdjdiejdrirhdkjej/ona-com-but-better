@@ -1,6 +1,7 @@
 import { setRequestLocale } from 'next-intl/server';
 import { redirect } from 'next/navigation';
 import { getUser } from '@/libs/auth';
+import { AppConfig } from '@/utils/AppConfig';
 
 export default async function AppLayout(props: {
   children: React.ReactNode;
@@ -11,7 +12,9 @@ export default async function AppLayout(props: {
 
   const user = await getUser();
   if (!user) {
-    redirect(`/${locale}/sign-in`);
+    const appPath = locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
+    const signInPath = locale === AppConfig.defaultLocale ? '/sign-in' : `/${locale}/sign-in`;
+    redirect(`${signInPath}?returnTo=${encodeURIComponent(appPath)}`);
   }
 
   return (

@@ -31,10 +31,21 @@ export function useAuth() {
   };
 }
 
-export function signIn() {
-  window.location.href = '/api/login';
+export function signIn(returnTo = '/app') {
+  const url = new URL('/api/login', window.location.origin);
+  url.searchParams.set('returnTo', returnTo);
+
+  try {
+    if (window.top && window.top !== window.self) {
+      window.top.location.assign(url.toString());
+      return;
+    }
+  } catch {
+  }
+
+  window.location.assign(url.toString());
 }
 
 export function signOut() {
-  window.location.href = '/api/logout';
+  window.location.assign('/api/logout');
 }

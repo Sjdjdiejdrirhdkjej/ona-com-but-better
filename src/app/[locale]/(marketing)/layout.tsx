@@ -2,6 +2,8 @@ import { setRequestLocale } from 'next-intl/server';
 import Link from 'next/link';
 import { BaseTemplate } from '@/templates/BaseTemplate';
 
+const loginHref = '/api/login?returnTo=%2Fapp';
+
 export default async function Layout(props: {
   children: React.ReactNode;
   params: Promise<{ locale: string }>;
@@ -48,7 +50,8 @@ export default async function Layout(props: {
       rightNav={(
         <>
           <a
-            href="/api/login"
+            href={loginHref}
+            target="_top"
             className="rounded-md border border-gray-900 px-3 py-1.5 text-gray-900 transition-colors hover:bg-gray-900 hover:text-white"
           >
             Get Started
