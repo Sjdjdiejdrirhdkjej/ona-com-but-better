@@ -24,9 +24,9 @@
     "playwright": "^1.59.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-markdown": "^10.1.0",
-    "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1",
+    "react-markdown": "^7.1.2",
+    "rehype-highlight": "^5.0.2",
+    "remark-gfm": "^3.0.1",
     "ws": "^8.20.0",
     "zod": "^4.3.6"
   },
