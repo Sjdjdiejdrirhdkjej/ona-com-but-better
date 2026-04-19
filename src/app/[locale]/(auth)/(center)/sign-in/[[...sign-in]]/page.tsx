@@ -1,6 +1,6 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-
-import { SignInButton } from '@/components/SignInButton';
+import { redirect } from 'next/navigation';
+import { AppConfig } from '@/utils/AppConfig';
 
 type ISignInPageProps = {
   params: Promise<{ locale: string }>;
@@ -35,8 +35,15 @@ export default async function SignInPage(props: ISignInPageProps) {
   const { locale } = await props.params;
   const searchParams = await props.searchParams;
   setRequestLocale(locale);
-  const returnTo = searchParams.returnTo || '/app';
+  const defaultReturnTo = locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
+  const returnTo = searchParams.returnTo || defaultReturnTo;
   const errorMessage = searchParams.error ? errorMessages[searchParams.error] || errorMessages.callback_failed : null;
+
+  if (!errorMessage) {
+    redirect(`/api/login?returnTo=${encodeURIComponent(returnTo)}`);
+  }
+
+  const retryHref = `/api/login?returnTo=${encodeURIComponent(returnTo)}`;
 
   return (
     <div style={{ textAlign: 'center', padding: '40px 24px' }}>
@@ -64,7 +71,23 @@ export default async function SignInPage(props: ISignInPageProps) {
           {errorMessage}
         </div>
       )}
-      <SignInButton returnTo={returnTo} />
+      <a
+        href={retryHref}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '12px 24px',
+          backgroundColor: '#18182a',
+          color: '#fff',
+          borderRadius: '8px',
+          fontSize: '15px',
+          fontWeight: 500,
+          textDecoration: 'none',
+        }}
+      >
+        Try again
+      </a>
     </div>
   );
 }

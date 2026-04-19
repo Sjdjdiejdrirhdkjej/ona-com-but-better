@@ -13,8 +13,7 @@ export default async function AppLayout(props: {
   const user = await getUser();
   if (!user) {
     const appPath = locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
-    const signInPath = locale === AppConfig.defaultLocale ? '/sign-in' : `/${locale}/sign-in`;
-    redirect(`${signInPath}?returnTo=${encodeURIComponent(appPath)}`);
+    redirect(`/api/login?returnTo=${encodeURIComponent(appPath)}`);
   }
 
   return (
