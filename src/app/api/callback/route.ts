@@ -48,18 +48,22 @@ function authCompleteResponse(baseUrl: string, returnTo: string) {
     h1{font-family:Georgia,serif;font-size:24px;margin:0 0 10px}
     p{color:#666;line-height:1.5;margin:0 0 24px}
     a{display:inline-flex;align-items:center;justify-content:center;padding:12px 24px;border-radius:8px;background:#18182a;color:white;text-decoration:none;font-weight:600}
+    .muted{font-size:13px;color:#777}
   </style>
 </head>
 <body>
   <main>
     <h1>You are signed in</h1>
-    <p>We are returning you to ONA. If this page does not continue automatically, use the button below.</p>
+    <p>Your ONA tab should continue automatically. If it does not, use the button below.</p>
     <a href="${escapeHtml(destination)}" target="_top" rel="noreferrer">Continue to ONA</a>
+    <p class="muted">It is safe to return to the original ONA tab.</p>
   </main>
   <script>
     const destination = ${JSON.stringify(destination)};
     const origin = ${JSON.stringify(origin)};
     const returnTo = ${JSON.stringify(returnTo)};
+    const userAgent = navigator.userAgent || '';
+    const isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent);
 
     function navigateCurrentTab() {
       try {
@@ -73,8 +77,6 @@ function authCompleteResponse(baseUrl: string, returnTo: string) {
     }
 
     function canUseDesktopPopupHandoff() {
-      const userAgent = navigator.userAgent || '';
-      const isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(userAgent);
       return !isMobileBrowser && window.opener && !window.opener.closed;
     }
 
@@ -83,11 +85,13 @@ function authCompleteResponse(baseUrl: string, returnTo: string) {
         window.opener.postMessage({ type: 'ona-auth-complete', returnTo }, origin);
         window.close();
         window.setTimeout(navigateCurrentTab, 300);
-      } else {
+      } else if (!isMobileBrowser) {
         navigateCurrentTab();
       }
     } catch {
-      navigateCurrentTab();
+      if (!isMobileBrowser) {
+        navigateCurrentTab();
+      }
     }
 
   </script>

@@ -16,7 +16,8 @@ const navLinks = [
 
 function getLoginHref(locale: string) {
   const returnTo = locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
-  return `/api/login?returnTo=${encodeURIComponent(returnTo)}`;
+  const signInPath = locale === AppConfig.defaultLocale ? '/sign-in' : `/${locale}/sign-in`;
+  return `${signInPath}?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
 export function MobileMenu() {

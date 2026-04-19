@@ -1,20 +1,94 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSafeBrowserReturnPath, navigateTopLevel } from '@/utils/browserCompat';
 
 type SignInLauncherProps = {
-  autoStart: boolean;
   href: string;
   label: string;
   returnTo: string;
 };
 
-export function SignInLauncher({ autoStart, href, label, returnTo }: SignInLauncherProps) {
-  const [isStarting, setIsStarting] = useState(autoStart);
+type SignInStatus = 'idle' | 'waiting' | 'blocked' | 'timeout' | 'checking';
+
+const MAX_SESSION_CHECKS = 45;
+const SESSION_CHECK_INTERVAL_MS = 2000;
+
+export function SignInLauncher({ href, label, returnTo }: SignInLauncherProps) {
+  const [status, setStatus] = useState<SignInStatus>('idle');
+  const [attempts, setAttempts] = useState(0);
+  const attemptsRef = useRef(0);
+  const timeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+
+  const clearPendingCheck = useCallback(() => {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  const checkSession = useCallback(async (scheduleNext = true) => {
+    if (scheduleNext) {
+      clearPendingCheck();
+    }
+
+    try {
+      const response = await fetch('/api/auth/user?optional=1', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+
+      if (response.ok) {
+        const nextPath = getSafeBrowserReturnPath(returnTo, returnTo);
+        navigateTopLevel(nextPath, 'replace');
+        return;
+      }
+    } catch {
+    }
+
+    if (!scheduleNext) {
+      setStatus(current => (current === 'checking' ? 'idle' : current));
+      return;
+    }
+
+    attemptsRef.current += 1;
+    setAttempts(attemptsRef.current);
+
+    if (attemptsRef.current >= MAX_SESSION_CHECKS) {
+      setStatus('timeout');
+      return;
+    }
+
+    timeoutRef.current = window.setTimeout(() => {
+      void checkSession(true);
+    }, SESSION_CHECK_INTERVAL_MS);
+  }, [clearPendingCheck, returnTo]);
+
+  const startWaiting = useCallback(() => {
+    attemptsRef.current = 0;
+    setAttempts(0);
+    setStatus('waiting');
+    void checkSession(true);
+  }, [checkSession]);
 
   function startAuth() {
-    navigateTopLevel(href);
+    const popup = window.open(
+      href,
+      'ona-replit-auth',
+      'popup=yes,width=520,height=720,noopener=no,noreferrer=no',
+    );
+
+    if (!popup) {
+      setStatus('blocked');
+      return;
+    }
+
+    try {
+      popup.focus();
+    } catch {
+    }
+
+    startWaiting();
   }
 
   useEffect(() => {
@@ -37,38 +111,96 @@ export function SignInLauncher({ autoStart, href, label, returnTo }: SignInLaunc
   }, [returnTo]);
 
   useEffect(() => {
-    if (!autoStart) {
-      setIsStarting(false);
-      return;
+    void checkSession(false);
+
+    function checkWhenVisible() {
+      if (document.visibilityState === 'visible') {
+        setStatus(current => (current === 'idle' ? 'checking' : current));
+        void checkSession(false);
+      }
     }
 
-    startAuth();
-  }, [autoStart, href]);
+    window.addEventListener('focus', checkWhenVisible);
+    document.addEventListener('visibilitychange', checkWhenVisible);
+
+    return () => {
+      clearPendingCheck();
+      window.removeEventListener('focus', checkWhenVisible);
+      document.removeEventListener('visibilitychange', checkWhenVisible);
+    };
+  }, [checkSession, clearPendingCheck]);
+
+  const progressText = status === 'waiting'
+    ? `Waiting for Replit sign-in to finish${attempts > 0 ? ` (${attempts}/${MAX_SESSION_CHECKS})` : ''}. Keep this tab open.`
+    : status === 'blocked'
+      ? 'Your browser blocked the sign-in tab. Use the link below to open Replit sign-in, then return here.'
+      : status === 'timeout'
+        ? 'We could not detect a completed sign-in yet. You can try again or continue in this tab.'
+        : status === 'checking'
+          ? 'Checking whether you are already signed in…'
+          : 'Replit sign-in will open separately so this ONA tab stays available.';
 
   return (
-    <a
-      href={href}
-      target="_top"
-      rel="noreferrer"
-      onClick={(event) => {
-        event.preventDefault();
-        setIsStarting(true);
-        startAuth();
-      }}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '12px 24px',
-        backgroundColor: '#18182a',
-        color: '#fff',
-        borderRadius: '8px',
-        fontSize: '15px',
-        fontWeight: 500,
-        textDecoration: 'none',
-      }}
-    >
-      {isStarting ? 'Opening Replit sign-in…' : label}
-    </a>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+      <button
+        type="button"
+        onClick={startAuth}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '12px 24px',
+          backgroundColor: '#18182a',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '8px',
+          fontSize: '15px',
+          fontWeight: 500,
+          textDecoration: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        {status === 'waiting' ? 'Replit sign-in is open…' : label}
+      </button>
+
+      <p aria-live="polite" style={{ color: '#666', fontSize: '14px', lineHeight: 1.5, margin: 0, maxWidth: '380px' }}>
+        {progressText}
+      </p>
+
+      {(status === 'blocked' || status === 'timeout') && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '10px' }}>
+          <a
+            href={href}
+            target="_blank"
+            onClick={startWaiting}
+            style={{ color: '#18182a', fontSize: '14px', fontWeight: 600 }}
+          >
+            Open Replit sign-in
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              setStatus('checking');
+              void checkSession(false);
+            }}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: '#18182a',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 600,
+              padding: 0,
+              textDecoration: 'underline',
+            }}
+          >
+            I finished sign-in
+          </button>
+          <a href={returnTo} target="_top" style={{ color: '#18182a', fontSize: '14px', fontWeight: 600 }}>
+            Continue in current tab
+          </a>
+        </div>
+      )}
+    </div>
   );
 }

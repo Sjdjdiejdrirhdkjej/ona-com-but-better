@@ -42,10 +42,14 @@ function getLocalizedAppPath(locale: string) {
   return locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
 }
 
+function getLocalizedSignInPath(locale: string) {
+  return locale === AppConfig.defaultLocale ? '/sign-in' : `/${locale}/sign-in`;
+}
+
 export function signIn(returnTo?: string) {
   const locale = getLocaleFromPath(returnTo || window.location.pathname);
   const safeReturnTo = getSafeBrowserReturnPath(returnTo, getLocalizedAppPath(locale));
-  const url = new URL('/api/login', window.location.origin);
+  const url = new URL(getLocalizedSignInPath(locale), window.location.origin);
   url.searchParams.set('returnTo', safeReturnTo);
 
   navigateTopLevel(url.toString());

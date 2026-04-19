@@ -47,11 +47,11 @@ export default async function SignInPage(props: ISignInPageProps) {
         Sign in to ONA
       </h1>
       <p style={{ color: '#666', marginBottom: '32px', fontSize: '15px' }}>
-        Use your Replit account to continue.
+        Keep this ONA tab open, then sign in with Replit in a separate tab.
       </p>
       {!errorMessage && (
         <p style={{ color: '#666', margin: '0 auto 24px', maxWidth: '360px', fontSize: '14px', lineHeight: 1.5 }}>
-          We are opening Replit sign-in from this page. If nothing happens, use the button below.
+          After Replit finishes, this page will detect your session and continue to your workspace.
         </p>
       )}
       {errorMessage && (
@@ -73,7 +73,6 @@ export default async function SignInPage(props: ISignInPageProps) {
         </div>
       )}
       <SignInLauncher
-        autoStart={!errorMessage}
         href={retryHref}
         returnTo={returnTo}
         label={errorMessage ? 'Try again' : 'Continue with Replit'}
