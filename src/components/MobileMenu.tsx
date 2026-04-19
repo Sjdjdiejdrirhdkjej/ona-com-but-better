@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { AppConfig } from '@/utils/AppConfig';
 
 const navLinks = [
   { label: 'Platform', href: '/about/' },
@@ -12,10 +14,17 @@ const navLinks = [
   { label: 'Pricing', href: '/about/' },
 ];
 
-const loginHref = '/api/login?returnTo=%2Fapp';
+function getLoginHref(locale: string) {
+  const signInPath = locale === AppConfig.defaultLocale ? '/sign-in' : `/${locale}/sign-in`;
+  const returnTo = locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
+  return `${signInPath}?returnTo=${encodeURIComponent(returnTo)}`;
+}
 
 export function MobileMenu() {
   const [open, setOpen] = useState(false);
+  const params = useParams<{ locale?: string }>();
+  const locale = AppConfig.locales.includes(params.locale || '') ? params.locale! : AppConfig.defaultLocale;
+  const loginHref = getLoginHref(locale);
 
   return (
     <div className="md:hidden">

@@ -1,8 +1,13 @@
 import { setRequestLocale } from 'next-intl/server';
 import Link from 'next/link';
 import { BaseTemplate } from '@/templates/BaseTemplate';
+import { AppConfig } from '@/utils/AppConfig';
 
-const loginHref = '/api/login?returnTo=%2Fapp';
+function getSignInHref(locale: string) {
+  const signInPath = locale === AppConfig.defaultLocale ? '/sign-in' : `/${locale}/sign-in`;
+  const returnTo = locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
+  return `${signInPath}?returnTo=${encodeURIComponent(returnTo)}`;
+}
 
 export default async function Layout(props: {
   children: React.ReactNode;
@@ -10,6 +15,7 @@ export default async function Layout(props: {
 }) {
   const { locale } = await props.params;
   setRequestLocale(locale);
+  const loginHref = getSignInHref(locale);
 
   return (
     <BaseTemplate

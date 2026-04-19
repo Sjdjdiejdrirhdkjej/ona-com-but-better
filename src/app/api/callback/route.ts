@@ -22,6 +22,72 @@ async function clearAuthAttempt(session: Awaited<ReturnType<typeof getSession>>)
   await session.save();
 }
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[char] || char);
+}
+
+function authCompleteResponse(baseUrl: string, returnTo: string) {
+  const destination = new URL(returnTo, baseUrl).toString();
+  const origin = new URL(baseUrl).origin;
+  const body = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Returning to ONA</title>
+  <style>
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f7f6f2;color:#18182a;font-family:Arial,sans-serif}
+    main{max-width:380px;padding:32px;text-align:center}
+    h1{font-family:Georgia,serif;font-size:24px;margin:0 0 10px}
+    p{color:#666;line-height:1.5;margin:0 0 24px}
+    a{display:inline-flex;align-items:center;justify-content:center;padding:12px 24px;border-radius:8px;background:#18182a;color:white;text-decoration:none;font-weight:600}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>You are signed in</h1>
+    <p>We are returning you to ONA. If this page does not continue automatically, use the button below.</p>
+    <a href="${escapeHtml(destination)}" target="_top" rel="noreferrer">Continue to ONA</a>
+  </main>
+  <script>
+    const destination = ${JSON.stringify(destination)};
+    const origin = ${JSON.stringify(origin)};
+    const returnTo = ${JSON.stringify(returnTo)};
+    let sentToOpener = false;
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: 'ona-auth-complete', returnTo }, origin);
+        sentToOpener = true;
+        window.setTimeout(() => window.close(), 500);
+      }
+    } catch {}
+    window.setTimeout(() => {
+      try {
+        if (window.top && window.top !== window.self) {
+          window.top.location.replace(destination);
+          return;
+        }
+      } catch {}
+      window.location.replace(destination);
+    }, sentToOpener ? 900 : 350);
+  </script>
+</body>
+</html>`;
+
+  return new NextResponse(body, {
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
+}
+
 export async function GET(request: NextRequest) {
   const requestBaseUrl = getAppBaseUrl(request);
 
@@ -70,7 +136,7 @@ export async function GET(request: NextRequest) {
     delete session.authOrigin;
     await session.save();
 
-    return NextResponse.redirect(new URL(returnTo, baseUrl));
+    return authCompleteResponse(baseUrl, returnTo);
   } catch (err) {
     console.error('OIDC callback error:', err);
     const session = await getSession();

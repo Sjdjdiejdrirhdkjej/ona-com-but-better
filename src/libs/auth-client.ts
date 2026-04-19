@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { AppConfig } from '@/utils/AppConfig';
 
 export type SessionUser = {
   id: string;
@@ -31,9 +32,24 @@ export function useAuth() {
   };
 }
 
-export function signIn(returnTo = '/app') {
-  const url = new URL('/api/login', window.location.origin);
-  url.searchParams.set('returnTo', returnTo);
+function getLocaleFromPath(path: string) {
+  const firstPathSegment = path.split('/').filter(Boolean)[0];
+  return AppConfig.locales.includes(firstPathSegment || '') ? firstPathSegment! : AppConfig.defaultLocale;
+}
+
+function getLocalizedAppPath(locale: string) {
+  return locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
+}
+
+function getLocalizedSignInPath(locale: string) {
+  return locale === AppConfig.defaultLocale ? '/sign-in' : `/${locale}/sign-in`;
+}
+
+export function signIn(returnTo?: string) {
+  const locale = getLocaleFromPath(returnTo || window.location.pathname);
+  const safeReturnTo = returnTo || getLocalizedAppPath(locale);
+  const url = new URL(getLocalizedSignInPath(locale), window.location.origin);
+  url.searchParams.set('returnTo', safeReturnTo);
 
   try {
     if (window.top && window.top !== window.self) {

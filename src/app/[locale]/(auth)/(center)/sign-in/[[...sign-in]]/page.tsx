@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { redirect } from 'next/navigation';
+import { getSafeReturnPath } from '@/libs/ReplitAuth';
 import { AppConfig } from '@/utils/AppConfig';
+import { SignInLauncher } from './SignInLauncher';
 
 type ISignInPageProps = {
   params: Promise<{ locale: string }>;
@@ -36,13 +37,8 @@ export default async function SignInPage(props: ISignInPageProps) {
   const searchParams = await props.searchParams;
   setRequestLocale(locale);
   const defaultReturnTo = locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
-  const returnTo = searchParams.returnTo || defaultReturnTo;
+  const returnTo = getSafeReturnPath(searchParams.returnTo || defaultReturnTo, 'https://ona.local');
   const errorMessage = searchParams.error ? errorMessages[searchParams.error] || errorMessages.callback_failed : null;
-
-  if (!errorMessage) {
-    redirect(`/api/login?returnTo=${encodeURIComponent(returnTo)}`);
-  }
-
   const retryHref = `/api/login?returnTo=${encodeURIComponent(returnTo)}`;
 
   return (
@@ -53,6 +49,11 @@ export default async function SignInPage(props: ISignInPageProps) {
       <p style={{ color: '#666', marginBottom: '32px', fontSize: '15px' }}>
         Use your Replit account to continue.
       </p>
+      {!errorMessage && (
+        <p style={{ color: '#666', margin: '0 auto 24px', maxWidth: '360px', fontSize: '14px', lineHeight: 1.5 }}>
+          We are opening Replit sign-in from this page. If nothing happens, use the button below.
+        </p>
+      )}
       {errorMessage && (
         <div
           role="alert"
@@ -71,23 +72,12 @@ export default async function SignInPage(props: ISignInPageProps) {
           {errorMessage}
         </div>
       )}
-      <a
+      <SignInLauncher
+        autoStart={!errorMessage}
         href={retryHref}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '12px 24px',
-          backgroundColor: '#18182a',
-          color: '#fff',
-          borderRadius: '8px',
-          fontSize: '15px',
-          fontWeight: 500,
-          textDecoration: 'none',
-        }}
-      >
-        Try again
-      </a>
+        returnTo={returnTo}
+        label={errorMessage ? 'Try again' : 'Continue with Replit'}
+      />
     </div>
   );
 }
