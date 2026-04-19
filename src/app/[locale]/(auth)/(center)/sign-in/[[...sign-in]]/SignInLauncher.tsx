@@ -178,6 +178,7 @@ export function SignInLauncher({ href, label, returnTo, showContinue = false }: 
               <a
                 href={href}
                 target="_blank"
+                rel="noopener noreferrer"
                 onClick={startWaiting}
                 style={{ color: '#18182a', fontSize: '14px', fontWeight: 600 }}
               >
