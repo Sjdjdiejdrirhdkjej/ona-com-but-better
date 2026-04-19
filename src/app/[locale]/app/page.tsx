@@ -2422,7 +2422,7 @@ export default function AppPage() {
                               </button>
                               <button
                                 onClick={e => deleteConversation(c.id, e)}
-                                className="delete-btn flex w-9 shrink-0 items-center justify-center border-l border-black/5 dark:border-white/8 text-gray-400 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                                className="delete-btn flex w-9 shrink-0 items-center justify-center border-l border-black/5 dark:border-white/8 text-gray-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-400 active:bg-red-50 active:text-red-500 dark:active:bg-red-500/10 dark:active:text-red-400"
                                 aria-label="Delete task"
                               >
                                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
