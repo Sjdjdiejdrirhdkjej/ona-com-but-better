@@ -86,11 +86,11 @@ function authCompleteResponse(baseUrl: string, returnTo: string) {
         window.close();
         window.setTimeout(navigateCurrentTab, 300);
       } else if (!isMobileBrowser) {
-        navigateCurrentTab();
+        window.setTimeout(navigateCurrentTab, 1500);
       }
     } catch {
       if (!isMobileBrowser) {
-        navigateCurrentTab();
+        window.setTimeout(navigateCurrentTab, 1500);
       }
     }
 

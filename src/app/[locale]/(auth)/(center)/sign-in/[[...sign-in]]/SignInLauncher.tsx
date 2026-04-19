@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getSafeBrowserReturnPath, navigateTopLevel } from '@/utils/browserCompat';
+import { getSafeBrowserReturnPath, isMobileBrowser, navigateTopLevel } from '@/utils/browserCompat';
 
 type SignInLauncherProps = {
   errorMessage?: string;
@@ -167,6 +167,11 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
   }, [clearPendingCheck, errorMessage]);
 
   useEffect(() => {
+    if (!errorMessage && !isMobileBrowser()) {
+      navigateTopLevel(href, 'replace');
+      return;
+    }
+
     void checkSession(false);
 
     function checkWhenVisible() {
@@ -184,7 +189,7 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
       window.removeEventListener('focus', checkWhenVisible);
       document.removeEventListener('visibilitychange', checkWhenVisible);
     };
-  }, [checkSession, clearPendingCheck]);
+  }, [checkSession, clearPendingCheck, errorMessage, href]);
 
   const progressText = status === 'waiting'
     ? `Waiting for Replit sign-in to finish${attempts > 0 ? ` (${attempts}/${MAX_SESSION_CHECKS})` : ''}. Keep this tab open.`
