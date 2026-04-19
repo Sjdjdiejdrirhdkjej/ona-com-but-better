@@ -16,7 +16,7 @@ const AssistantMarkdownLazy = dynamic(() => import('@/components/AssistantMarkdo
 const SERIF = 'Georgia, "Times New Roman", serif';
 const APP_NAME = 'ONA but OPEN SOURCE';
 const MODEL_OPTIONS = [
-  { key: 'ona-max', label: 'ONA Max' },
+  { key: 'ona-max', label: 'ONA Max Accuracy' },
   { key: 'ona-max-fast', label: 'ONA Max Fast' },
   { key: 'ona-mini', label: 'ONA Mini' },
 ] as const;
@@ -611,7 +611,7 @@ export default function AppPage() {
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<string>('ona-max-fast');
+  const [selectedModel, setSelectedModel] = useState<string>('ona-max');
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
@@ -2238,7 +2238,7 @@ export default function AppPage() {
                       )}
                       {/* Model selector */}
                       {(() => {
-                        const current = MODEL_OPTIONS.find(m => m.key === selectedModel) ?? MODEL_OPTIONS[1];
+                        const current = MODEL_OPTIONS.find(m => m.key === selectedModel) ?? MODEL_OPTIONS[0];
                         return (
                           <div ref={modelMenuRef} className="relative mb-2 flex justify-start">
                             <button
@@ -2445,7 +2445,7 @@ export default function AppPage() {
 
                 {/* Model selector */}
                 {(() => {
-                  const current = MODEL_OPTIONS.find(m => m.key === selectedModel) ?? MODEL_OPTIONS[1];
+                  const current = MODEL_OPTIONS.find(m => m.key === selectedModel) ?? MODEL_OPTIONS[0];
                   return (
                     <div ref={modelMenuRef} className="relative mb-1.5 flex">
                       <button

@@ -10,7 +10,7 @@ An open-source platform for AI background software engineering agents. The landi
 - **ORM**: Drizzle ORM
 - **Styling**: Tailwind CSS v4
 - **i18n**: next-intl with `[locale]` routing, locales en/fr, `as-needed` prefix (so `/app` works without prefix)
-- **AI**: Fireworks AI — ONA Max uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`); ONA Max Fast uses Kimi K2.5 Turbo (`accounts/fireworks/routers/kimi-k2p5-turbo`); ONA Mini uses Qwen3 30B A3B Instruct (`accounts/fireworks/models/qwen3-30b-a3b-instruct-2507`); the Oracle deep-reasoning subagent uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`); the Librarian research subagent uses Kimi K2 Thinking (`accounts/fireworks/models/kimi-k2-thinking`); the Browser Use Expert subagent uses Kimi K2 Instruct 0905 (`accounts/fireworks/models/kimi-k2-instruct-0905`) — all overridable via env vars
+- **AI**: Fireworks AI — ONA Max Accuracy uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`) and is the default for best task accuracy; ONA Max Fast uses Kimi K2.5 Turbo (`accounts/fireworks/routers/kimi-k2p5-turbo`); ONA Mini uses DeepSeek V3.2 (`accounts/fireworks/models/deepseek-v3p2`); the Oracle deep-reasoning subagent uses GLM 5.1 (`accounts/fireworks/models/glm-5p1`); the Librarian research subagent uses Kimi K2 Thinking (`accounts/fireworks/models/kimi-k2-thinking`); the Browser Use Expert subagent uses Kimi K2 Instruct 0905 (`accounts/fireworks/models/kimi-k2-instruct-0905`) — all overridable via env vars
 - **GitHub delivery policy**: repository changes default to branch + pull request; direct writes to the repository default branch are blocked unless the user explicitly asks for a direct push.
 - **Package manager**: npm (with `legacy-peer-deps=true` in `.npmrc`)
 
@@ -58,7 +58,7 @@ An open-source platform for AI background software engineering agents. The landi
 - Image upload (file picker button) and paste-from-clipboard support
 - First-message sends stay on the prompt screen with a disabled spinner while Daytona pre-boots; persisted `sandbox_booting`/`sandbox_ready` events clear the gate and reveal the chat UI once the VM is ready.
 - Credits are cent-denominated: 1 credit equals 1 cent. Each successful AI provider call deducts credits from `user_credits` using `CREDITS_PER_1000_TOKENS` if set, otherwise 1 credit per 1,000 estimated tokens with a 1-credit minimum.
-- System prompt positions ONA but OPEN SOURCE as a background software engineering agent platform
+- System prompt positions ONA but OPEN SOURCE as a send-and-walk-away background software engineering agent with task-risk-based accuracy escalation, stronger autonomous continuation rules, Oracle second-opinion reasoning for high-risk work, and lower-temperature model calls for implementation accuracy.
 - GitHub tools support branch creation, file writes on feature branches, and pull request creation; `src/libs/GitHub.ts` prevents accidental direct writes to the default branch.
 - Suggestion chips: Inspect repos, Clone a repo, Review PRs, Find CVEs
 - `/app` task history remains available via the top History control and the collapsible Past tasks tray; both support search/switching, and persisted conversations can be renamed/deleted
