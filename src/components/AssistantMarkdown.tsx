@@ -159,7 +159,7 @@ export default function AssistantMarkdown({ text }: { text: string }) {
   const segments = useMemo(() => parseSegments(text), [text]);
 
   return (
-    <div className="prose-sm max-w-none">
+    <div className="prose-sm max-w-none min-w-0 break-words [overflow-wrap:anywhere]">
       {segments.map((seg, i) => {
         if (seg.kind === 'think') {
           return (

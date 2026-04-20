@@ -165,12 +165,12 @@ function MessageBubble({ msg }: { msg: Message }) {
         )}
         {isUser
           ? (
-              <div className="rounded-3xl rounded-tr-md bg-gray-950 px-4 py-3 text-sm leading-relaxed text-white shadow-sm dark:bg-gray-100 dark:text-gray-950 whitespace-pre-wrap">
+              <div className="min-w-0 rounded-3xl rounded-tr-md bg-gray-950 px-4 py-3 text-sm leading-relaxed text-white shadow-sm dark:bg-gray-100 dark:text-gray-950 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {text}
               </div>
             )
           : (
-              <div className="rounded-3xl rounded-tl-md border border-black/6 bg-white/70 px-4 py-3 text-sm leading-relaxed text-gray-800 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-gray-200">
+              <div className="min-w-0 rounded-3xl rounded-tl-md border border-black/6 bg-white/70 px-4 py-3 text-sm leading-relaxed text-gray-800 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-gray-200 [overflow-wrap:anywhere]">
                 <AssistantMarkdownLazy text={text} />
               </div>
             )}
