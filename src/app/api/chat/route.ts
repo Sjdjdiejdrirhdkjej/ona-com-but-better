@@ -89,10 +89,10 @@ const ULTRAWORK_TOOLS = [TODO_WRITE_TOOL, TODO_READ_TOOL, TASK_COMPLETE_TOOL];
 export const ONA_MODELS = {
   'ona-max': {
     label: 'Hands on experience',
-    description: 'GLM 5.1 — most capable',
-    fireworksId: 'accounts/fireworks/models/glm-5p1',
+    description: 'Kimi K2.5 — fast, collaborative, agentic coding',
+    fireworksId: 'accounts/fireworks/routers/kimi-k2p5-turbo',
     maxTokens: 16384,
-    temperature: 0.08,
+    temperature: 0.6,
   },
   'ona-hands-off': {
     label: 'Hands off experience',

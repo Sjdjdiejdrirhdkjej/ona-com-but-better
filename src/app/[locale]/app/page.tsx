@@ -17,7 +17,7 @@ const AssistantMarkdownLazy = dynamic(() => import('@/components/AssistantMarkdo
 const SERIF = 'Georgia, "Times New Roman", serif';
 const APP_NAME = 'ONA but OPEN SOURCE';
 const AUTONOMY_OPTIONS = [
-  { key: 'ona-max', label: 'Hands on experience', description: 'GLM 5.1 · fast, collaborative' },
+  { key: 'ona-max', label: 'Hands on experience', description: 'Kimi K2.5 · fast, collaborative' },
   { key: 'ona-hands-off', label: 'Hands off experience', description: 'Qwen3 Coder 480B · agentic, 262K ctx' },
 ] as const;
 const PROMPT_SUGGESTIONS = [
