@@ -2823,51 +2823,67 @@ export default function AppPage() {
                           </button>
                         </div>
                       )}
-                      {/* Autonomy level selector */}
+                      {/* Autonomy level selector + super agent button */}
                       {(() => {
                         const current = AUTONOMY_OPTIONS.find(m => m.key === selectedModel) ?? AUTONOMY_OPTIONS[0];
                         return (
-                          <div ref={modelMenuRef} className="relative mb-2 flex justify-center sm:justify-start">
+                          <div className="mb-2 flex items-center justify-center gap-2 sm:justify-start">
+                            <div ref={modelMenuRef} className="relative flex">
+                              <button
+                                type="button"
+                                onClick={() => setModelMenuOpen(o => !o)}
+                                className="flex items-center gap-1.5 rounded-full border border-black/8 bg-white/80 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200"
+                              >
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0 text-indigo-500">
+                                  <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.4" />
+                                  <path d="M3 5h4M5 3v4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                                </svg>
+                                <span className="hidden sm:inline text-gray-400 dark:text-gray-500">Autonomy level:</span>
+                                {current.label}
+                                <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className={`shrink-0 transition-transform ${modelMenuOpen ? 'rotate-180' : ''}`}>
+                                  <path d="M1.5 3L4 5.5L6.5 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </button>
+                              {modelMenuOpen && (
+                                <div className="absolute bottom-full left-0 mb-1.5 z-50 w-56 overflow-hidden rounded-2xl border border-black/8 shadow-lg dark:border-white/10" style={{ backgroundColor: 'var(--bg-card)' }}>
+                                  <div className="px-3 py-2 border-b border-black/6 dark:border-white/8">
+                                    <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Autonomy level</span>
+                                  </div>
+                                  {AUTONOMY_OPTIONS.map(opt => (
+                                    <button
+                                      key={opt.key}
+                                      type="button"
+                                      onClick={() => { setSelectedModel(opt.key); setModelMenuOpen(false); }}
+                                      className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/8 ${selectedModel === opt.key ? 'bg-black/5 dark:bg-white/8' : ''}`}
+                                    >
+                                      <span>
+                                        <span className="block text-xs font-medium text-gray-900 dark:text-gray-100">{opt.label}</span>
+                                        <span className="block text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{opt.description}</span>
+                                      </span>
+                                      {selectedModel === opt.key && (
+                                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-indigo-500">
+                                          <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                             <button
                               type="button"
-                              onClick={() => setModelMenuOpen(o => !o)}
-                              className="flex items-center gap-1.5 rounded-full border border-black/8 bg-white/80 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200"
+                              onClick={() => { setSuperAgentOpen(true); setSuperAgentError(null); setSuperAgentWakeSuccess(false); }}
+                              disabled={!canConfigureSuperAgent}
+                              title={canConfigureSuperAgent ? 'Configure super agent (⌘⇧S)' : 'Send the first task to save this conversation before enabling the super agent'}
+                              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                                activeConversation?.superAgent?.enabled
+                                  ? 'border-emerald-200 text-emerald-700 hover:border-emerald-400 dark:border-emerald-900 dark:text-emerald-300 dark:hover:border-emerald-700'
+                                  : 'border-black/8 bg-white/80 text-gray-500 hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:border-white/20 dark:hover:text-gray-200'
+                              }`}
                             >
-                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0 text-indigo-500">
-                                <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.4" />
-                                <path d="M3 5h4M5 3v4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                              </svg>
-                              <span className="hidden sm:inline text-gray-400 dark:text-gray-500">Autonomy level:</span>
-                              {current.label}
-                              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" className={`shrink-0 transition-transform ${modelMenuOpen ? 'rotate-180' : ''}`}>
-                                <path d="M1.5 3L4 5.5L6.5 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
+                              <span className={`size-1.5 shrink-0 rounded-full ${activeConversation?.superAgent?.enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                              Super agent
                             </button>
-                            {modelMenuOpen && (
-                              <div className="absolute bottom-full left-0 mb-1.5 z-50 w-56 overflow-hidden rounded-2xl border border-black/8 shadow-lg dark:border-white/10" style={{ backgroundColor: 'var(--bg-card)' }}>
-                                <div className="px-3 py-2 border-b border-black/6 dark:border-white/8">
-                                  <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">Autonomy level</span>
-                                </div>
-                                {AUTONOMY_OPTIONS.map(opt => (
-                                  <button
-                                    key={opt.key}
-                                    type="button"
-                                    onClick={() => { setSelectedModel(opt.key); setModelMenuOpen(false); }}
-                                    className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/8 ${selectedModel === opt.key ? 'bg-black/5 dark:bg-white/8' : ''}`}
-                                  >
-                                    <span>
-                                      <span className="block text-xs font-medium text-gray-900 dark:text-gray-100">{opt.label}</span>
-                                      <span className="block text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{opt.description}</span>
-                                    </span>
-                                    {selectedModel === opt.key && (
-                                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-indigo-500">
-                                        <path d="M2.5 7L5.5 10L11.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                    )}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
                           </div>
                         );
                       })()}
