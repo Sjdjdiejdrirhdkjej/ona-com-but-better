@@ -3,6 +3,15 @@
 import { useEffect, useState } from 'react';
 import { signOut } from '@/libs/auth-client';
 
+type ApiKeyRecord = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+};
+
 export function DarkModeToggle() {
   const [mounted, setMounted] = useState(false);
   const [dark, setDark] = useState(false);
@@ -58,5 +67,158 @@ export function SignOutButton() {
       </svg>
       Sign out
     </button>
+  );
+}
+
+export function ApiKeysPanel() {
+  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [name, setName] = useState('Default key');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  async function loadApiKeys() {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/settings/api-keys');
+      if (!response.ok) {
+        throw new Error('Could not load API keys.');
+      }
+      const data = await response.json() as { apiKeys: ApiKeyRecord[] };
+      setApiKeys(data.apiKeys);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load API keys.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadApiKeys();
+  }, []);
+
+  async function createKey() {
+    setSaving(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const response = await fetch('/api/settings/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!response.ok) {
+        throw new Error('Could not create API key.');
+      }
+      const data = await response.json() as { apiKey: string; record: ApiKeyRecord };
+      setNewKey(data.apiKey);
+      setApiKeys(keys => [data.record, ...keys]);
+      setName('Default key');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create API key.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function revokeKey(id: string) {
+    setError(null);
+    try {
+      const response = await fetch(`/api/settings/api-keys/${id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error('Could not revoke API key.');
+      }
+      setApiKeys(keys => keys.map(key => key.id === id ? { ...key, revokedAt: new Date().toISOString() } : key));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke API key.');
+    }
+  }
+
+  async function copyNewKey() {
+    if (!newKey) {
+      return;
+    }
+    await navigator.clipboard.writeText(newKey);
+    setCopied(true);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Programmatic API access</p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Create an API key and send it as a Bearer token in the Authorization header.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          value={name}
+          onChange={event => setName(event.target.value)}
+          className="min-h-10 flex-1 rounded-xl border border-black/8 bg-transparent px-3 text-sm text-gray-900 outline-none transition focus:border-gray-500 dark:border-white/10 dark:text-gray-100"
+          placeholder="Key name"
+        />
+        <button
+          type="button"
+          onClick={createKey}
+          disabled={saving}
+          className="min-h-10 rounded-xl bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300"
+        >
+          {saving ? 'Creating…' : 'Create API key'}
+        </button>
+      </div>
+
+      {newKey && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-50 p-3 dark:bg-emerald-500/10">
+          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">Copy this key now. It will not be shown again.</p>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-white px-3 py-2 text-xs text-gray-900 dark:bg-black/30 dark:text-gray-100">
+              {newKey}
+            </code>
+            <button
+              type="button"
+              onClick={copyNewKey}
+              className="rounded-lg border border-emerald-600/30 px-3 py-2 text-xs font-medium text-emerald-800 transition hover:bg-emerald-100 dark:text-emerald-200 dark:hover:bg-emerald-500/10"
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+
+      <div className="space-y-2">
+        {loading
+          ? <p className="text-xs text-gray-500 dark:text-gray-400">Loading API keys…</p>
+          : apiKeys.length === 0
+            ? <p className="text-xs text-gray-500 dark:text-gray-400">No API keys yet.</p>
+            : apiKeys.map(key => (
+                <div
+                  key={key.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-black/8 px-3 py-2 dark:border-white/10"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{key.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {key.keyPrefix}… · {key.revokedAt ? 'Revoked' : key.lastUsedAt ? `Last used ${new Date(key.lastUsedAt).toLocaleDateString()}` : 'Never used'}
+                    </p>
+                  </div>
+                  {!key.revokedAt && (
+                    <button
+                      type="button"
+                      onClick={() => revokeKey(key.id)}
+                      className="shrink-0 rounded-lg border border-red-500/20 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                    >
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              ))}
+      </div>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getUser } from '@/libs/auth';
-import { DarkModeToggle, SignOutButton } from './SettingsActions';
+import { ApiKeysPanel, DarkModeToggle, SignOutButton } from './SettingsActions';
 
 function getInitials(firstName: string | null, lastName: string | null, email: string | null): string {
   const f = (firstName ?? '').trim();
@@ -66,6 +66,14 @@ export default async function UserProfilePage() {
         >
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Appearance</h2>
           <DarkModeToggle />
+        </section>
+
+        <section
+          className="rounded-2xl border border-black/8 dark:border-white/10 p-6"
+          style={{ backgroundColor: 'var(--bg-card)' }}
+        >
+          <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">API keys</h2>
+          <ApiKeysPanel />
         </section>
 
         <section

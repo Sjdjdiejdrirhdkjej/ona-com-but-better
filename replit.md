@@ -82,6 +82,7 @@ An open-source platform for AI background software engineering agents. The landi
 - `messages` — chat messages; `role` can be `user`, `assistant`, or `tool_steps` (JSON array of ToolStep)
 - `agent_jobs` — one per `/api/chat` call; status: `running | done | error`
 - `agent_events` — sequential event log per job (sandbox_booting, sandbox_ready, tool_call, tool_start, tool_complete, tool_done, next_assistant_msg, content, error, done)
+- `api_keys` — hashed per-user API keys created from Settings for programmatic API access. Raw keys are only shown once and must be sent as `Authorization: Bearer <key>`.
 
 ## Development
 ```bash

@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod/v4';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
+import { getBearerToken, getRequestAuth } from '@/libs/ApiKeys';
 import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/GitHub';
 import { daytonaToolDefinitions, isDaytonaTool, prebootSandbox, runDaytonaTool } from '@/libs/Daytona';
@@ -920,6 +921,13 @@ export async function POST(req: NextRequest) {
   (async () => {
     let jobId: string | null = null;
     try {
+      const auth = await getRequestAuth(req);
+      if (getBearerToken(req) && !auth) {
+        emit({ type: 'error', message: 'Invalid API key.' });
+        close();
+        return;
+      }
+
       let rawBody: unknown;
       try {
         rawBody = await req.json();

@@ -1,15 +1,33 @@
 import type { NextRequest } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
+import { getBearerToken, getRequestAuth } from '@/libs/ApiKeys';
 import { conversationsSchema, messagesSchema } from '@/models/Schema';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await getRequestAuth(req);
+  if (getBearerToken(req) && !auth) {
+    return Response.json({ error: 'Invalid API key' }, { status: 401 });
+  }
+
   const { id } = await params;
   const { messageId, role, content } = await req.json() as {
     messageId: string;
     role: string;
     content: unknown;
   };
+
+  if (auth) {
+    const [conversation] = await db
+      .select({ id: conversationsSchema.id })
+      .from(conversationsSchema)
+      .where(and(eq(conversationsSchema.id, id), eq(conversationsSchema.userId, auth.userId)))
+      .limit(1);
+
+    if (!conversation) {
+      return Response.json({ error: 'Conversation not found' }, { status: 404 });
+    }
+  }
 
   const [msg] = await db
     .insert(messagesSchema)
@@ -24,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   await db
     .update(conversationsSchema)
     .set({ updatedAt: new Date() })
-    .where(eq(conversationsSchema.id, id));
+    .where(auth ? and(eq(conversationsSchema.id, id), eq(conversationsSchema.userId, auth.userId)) : eq(conversationsSchema.id, id));
 
   return Response.json(msg, { status: 201 });
 }
