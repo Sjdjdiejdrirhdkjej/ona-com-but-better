@@ -48,6 +48,7 @@ An open-source platform for AI background software engineering agents. The landi
 
 ## Design Constants
 - Landing page direction: ampcode.com-inspired editorial layout with pale grid background, oversized serif typography, thin divider lines, compact black CTAs, and terminal-style dark visual panels while preserving existing ONA copy
+- Ona.com feature parity additions: marketing now highlights trigger-based automations, native context integrations, isolated per-task environments, reporting/audit trails, governance controls, cost caps, human takeover, model routing, reusable skills, backlog triage, docs drift, and dead-code cleanup.
 - `/app` direction: Manus.im-inspired task prompt UI with a near-white canvas, compact navigation, centered serif hero headline, large rounded prompt composer, small announcement strip, pill suggestion actions, and a restrained gray/black palette while preserving ONA identity and existing capabilities
 - App background: `#fbfbfa` light, `#101010` dark
 - Serif font: `Georgia, "Times New Roman", serif`

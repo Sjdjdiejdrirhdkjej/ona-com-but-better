@@ -21,10 +21,12 @@ const MODEL_OPTIONS = [
   { key: 'ona-mini', label: 'ONA Mini' },
 ] as const;
 const PROMPT_SUGGESTIONS = [
-  { label: 'Inspect repos', prompt: 'Inspect my GitHub repositories and summarize the highest-impact improvement opportunities.' },
-  { label: 'Clone a repo', prompt: 'Clone a repository, explore the codebase, and propose a safe implementation plan.' },
-  { label: 'Review PRs', prompt: 'Review my recent pull requests for bugs, security issues, and maintainability risks.' },
-  { label: 'Find CVEs', prompt: 'Find potential CVEs and dependency risks in a repository, then suggest fixes.' },
+  { label: 'Backlog sweep', prompt: 'Inspect connected backlog items, identify one well-scoped engineering task, implement it in a branch, run checks, and prepare a pull request summary.' },
+  { label: 'Bug triage', prompt: 'Investigate recent production bug reports or error context, reproduce the likely failure, fix it, and explain the validation steps.' },
+  { label: 'Review PRs', prompt: 'Review my recent pull requests for bugs, security issues, and maintainability risks, then suggest concrete fixes.' },
+  { label: 'Find CVEs', prompt: 'Find potential CVEs and dependency risks in a repository, apply safe updates, rerun the scan, and summarize remaining risk.' },
+  { label: 'Docs drift', prompt: 'Compare recent code behavior with project documentation, update stale docs, and summarize what changed.' },
+  { label: 'Dead code cleanup', prompt: 'Find unused dependencies, exports, and files, remove safe candidates, run checks, and prepare a reviewable change summary.' },
 ];
 
 type ContentPart =
@@ -2159,7 +2161,7 @@ export default function AppPage() {
         </div>
       </header>
       <div className="shrink-0 border-b border-black/5 py-1.5 text-center text-[11px] text-gray-500 dark:border-white/8 dark:text-gray-400">
-        ONA runs background software engineering tasks and keeps working after you leave.
+        ONA runs background tasks in isolated VMs, keeps audit-ready progress, and lets you take over when needed.
       </div>
 
       {/* ── Body ── */}
@@ -2176,7 +2178,7 @@ export default function AppPage() {
                       className="mb-6 text-center text-3xl text-gray-900 dark:text-gray-100 sm:text-4xl"
                       style={{ fontFamily: SERIF, fontWeight: 400 }}
                     >
-                      What can I do for you?
+                      What should your background agent ship?
                     </h1>
                     <div className="relative w-full max-w-2xl">
                       {/* @ mention file picker */}

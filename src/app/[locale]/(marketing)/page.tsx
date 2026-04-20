@@ -28,7 +28,7 @@ const featureCards = [
   {
     tag: 'Automations',
     title: 'Agent fleets at scale.',
-    body: 'Triggered across your codebase with repeatable workflows that run on PRs, schedules, or webhooks.',
+    body: 'Trigger repeatable workflows from pull requests, schedules, webhooks, or backlog systems, then review the PRs when they are ready.',
     cta: 'Explore automations',
   },
   {
@@ -40,9 +40,52 @@ const featureCards = [
   {
     tag: 'Governance with guarantees',
     title: 'Runs in your VPC.',
-    body: 'Complete network control. Audit trails, scoped credentials, and kernel-level policy enforcement.',
+    body: 'Complete network control with audit trails, scoped credentials, command policies, and explicit least-privilege access.',
     cta: 'Learn about governance',
   },
+];
+
+const automationSteps = [
+  {
+    step: '01',
+    title: 'Trigger',
+    body: 'Start agents from PRs, schedules, webhooks, Slack-style prompts, or plain-language filters over your issue tracker.',
+  },
+  {
+    step: '02',
+    title: 'Execute',
+    body: 'Each task gets an isolated cloud VM with the repo, dependencies, tests, tools, network access, and scoped secrets.',
+  },
+  {
+    step: '03',
+    title: 'Report',
+    body: 'Agents return linked PRs, test results, failures, cost signals, and a durable audit trail for review.',
+  },
+];
+
+const integrationCards = [
+  {
+    title: 'Backlog and planning',
+    body: 'Pull well-scoped work from Linear, Notion, Jira, and Atlassian-style systems, then turn tickets into branches and PRs.',
+    items: ['Linear', 'Notion', 'Atlassian'],
+  },
+  {
+    title: 'Code and delivery',
+    body: 'Clone, branch, build, test, commit, push, and open reviewable pull requests across GitHub or GitLab repositories.',
+    items: ['GitHub', 'GitLab', 'CI'],
+  },
+  {
+    title: 'Incidents and security',
+    body: 'Triage production bugs and dependency risk from issue streams, scanners, and internal tools before engineers start their day.',
+    items: ['Sentry', 'CVE scanners', 'MCP'],
+  },
+];
+
+const platformCapabilities = [
+  'Human takeover: open the same environment, redirect the work, or finish the task yourself.',
+  'Reusable skills and AGENTS.md conventions keep agents aligned with team standards.',
+  'Model routing balances accuracy, speed, and cost as frontier models change.',
+  'Team-level cost controls and usage visibility prevent surprise agent sprawl.',
 ];
 
 const useCases = [
@@ -60,6 +103,16 @@ const useCases = [
     title: 'Automated CVE remediation',
     body: 'Remediates what your scanner finds — across hundreds of repos, in isolated environments. Tested, with PRs ready for review.',
     cta: 'Learn more about CVE remediation',
+  },
+  {
+    title: 'Backlog and bug triage',
+    body: 'Pick up well-scoped backlog tickets, triage Sentry-style issues, reproduce failures, ship fixes, and leave a linked report.',
+    cta: 'Learn more about backlog automation',
+  },
+  {
+    title: 'Docs drift and dead-code cleanup',
+    body: 'Run deterministic scripts with AI judgment to update docs, remove unused code, and keep repositories ready for other agents.',
+    cta: 'Learn more about maintenance agents',
   },
 ];
 
@@ -215,6 +268,62 @@ export default async function Index(props: IIndexProps) {
       </section>
 
       <section className="mx-auto max-w-7xl border-x border-t border-black/8 px-6 py-14 dark:border-white/10 sm:px-8">
+        <div className="grid gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-4">
+            <SectionLabel>How automations run</SectionLabel>
+            <h2 className="max-w-sm text-5xl leading-[0.9] tracking-[-0.07em] text-neutral-950 dark:text-neutral-50" style={{ fontFamily: SERIF, fontWeight: 400 }}>
+              Closed-loop work, not chat-only assistance.
+            </h2>
+            <p className="mt-5 max-w-sm text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">
+              Ona.com emphasizes proactive background agents that combine prompts with deterministic commands. This app now surfaces that same workflow: trigger, execute, report.
+            </p>
+          </div>
+          <div className="lg:col-span-8">
+            <div className="grid border border-black/8 dark:border-white/10 md:grid-cols-3">
+              {automationSteps.map(item => (
+                <div key={item.step} className="min-h-80 border-b border-black/8 p-6 last:border-b-0 dark:border-white/10 md:border-b-0 md:border-r md:last:border-r-0 sm:p-8">
+                  <p className="text-[11px] uppercase tracking-[0.28em] text-neutral-500 dark:text-neutral-400" style={{ fontFamily: MONO }}>{item.step}</p>
+                  <h3 className="mt-14 text-4xl leading-[0.9] tracking-[-0.06em] text-neutral-950 dark:text-neutral-50" style={{ fontFamily: SERIF, fontWeight: 400 }}>
+                    {item.title}
+                  </h3>
+                  <p className="mt-5 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">{item.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl border-x border-t border-black/8 px-6 py-14 dark:border-white/10 sm:px-8">
+        <SectionLabel>Native context</SectionLabel>
+        <div className="grid gap-6 lg:grid-cols-12 lg:items-end">
+          <h2 className="text-5xl leading-[0.9] tracking-[-0.07em] text-neutral-950 dark:text-neutral-50 lg:col-span-5" style={{ fontFamily: SERIF, fontWeight: 400 }}>
+            Connect agents to the systems engineers already use.
+          </h2>
+          <p className="max-w-2xl text-base leading-relaxed text-neutral-700 dark:text-neutral-300 lg:col-span-7">
+            Ona.com highlights native integrations for planning, code, incidents, and internal tools. The open-source version now makes those missing categories explicit so teams understand where agents get context and where they deliver work.
+          </p>
+        </div>
+        <div className="mt-10 grid border border-black/8 dark:border-white/10 md:grid-cols-3">
+          {integrationCards.map(card => (
+            <div key={card.title} className="border-b border-black/8 p-6 last:border-b-0 dark:border-white/10 md:border-b-0 md:border-r md:last:border-r-0 sm:p-8">
+              <h3 className="text-3xl leading-[0.92] tracking-[-0.05em] text-neutral-950 dark:text-neutral-50" style={{ fontFamily: SERIF, fontWeight: 400 }}>
+                {card.title}
+              </h3>
+              <p className="mt-5 text-sm leading-relaxed text-neutral-700 dark:text-neutral-300">{card.body}</p>
+              <div className="mt-8 flex flex-wrap gap-2">
+                {card.items.map(item => (
+                  <span key={item} className="border border-black/12 px-3 py-1.5 text-xs text-neutral-600 dark:border-white/15 dark:text-neutral-400" style={{ fontFamily: MONO }}>
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl border-x border-t border-black/8 px-6 py-14 dark:border-white/10 sm:px-8">
         <SectionLabel>Use cases</SectionLabel>
         <div className="divide-y divide-black/8 border-y border-black/8 dark:divide-white/10 dark:border-white/10">
           {useCases.map(item => (
@@ -267,16 +376,36 @@ export default async function Index(props: IIndexProps) {
         <div className="grid gap-8 border border-black/8 p-6 dark:border-white/10 sm:p-8 md:grid-cols-12 md:items-center">
           <div className="md:col-span-7">
             <h2 className="text-5xl leading-[0.9] tracking-[-0.07em] text-neutral-950 dark:text-neutral-50" style={{ fontFamily: SERIF, fontWeight: 400 }}>
-              Enterprise-ready.
+              Governed from the runtime up.
             </h2>
             <p className="mt-4 text-base text-neutral-700 dark:text-neutral-300">
-              Compliant, certified, and trusted by Fortune 500 companies.
+              Audit every human and AI action, scope every credential, and keep background agents inside approved environments.
             </p>
           </div>
-          <div className="flex gap-3 md:col-span-5 md:justify-end">
-            {['SOC 2', 'Fortune 500'].map(badge => (
+          <div className="flex flex-wrap gap-3 md:col-span-5 md:justify-end">
+            {['SOC 2', 'RBAC', 'Audit trails', 'Cost caps'].map(badge => (
               <div key={badge} className="border border-black/12 px-4 py-2 text-sm font-medium text-neutral-800 dark:border-white/15 dark:text-neutral-300" style={{ fontFamily: MONO }}>
                 {badge}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl border-x border-t border-black/8 px-6 py-14 dark:border-white/10 sm:px-8">
+        <div className="grid gap-8 bg-neutral-950 p-6 text-neutral-50 dark:bg-neutral-100 dark:text-neutral-950 sm:p-10 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <p className="mb-8 text-[11px] uppercase tracking-[0.28em] text-neutral-400 dark:text-neutral-500" style={{ fontFamily: MONO }}>
+              Operating model
+            </p>
+            <h2 className="text-5xl leading-[0.9] tracking-[-0.07em]" style={{ fontFamily: SERIF, fontWeight: 400 }}>
+              Autonomous when you want it. Takeover when you need it.
+            </h2>
+          </div>
+          <div className="grid gap-4 lg:col-span-7">
+            {platformCapabilities.map(item => (
+              <div key={item} className="border-t border-white/15 pt-4 text-sm leading-relaxed text-neutral-300 first:border-t-0 first:pt-0 dark:border-black/15 dark:text-neutral-700">
+                {item}
               </div>
             ))}
           </div>

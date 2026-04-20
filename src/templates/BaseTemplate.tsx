@@ -6,11 +6,11 @@ import { AppConfig } from '@/utils/AppConfig';
 const footerLinks = [
   {
     heading: 'Platform',
-    links: ['Background agents', 'Automations', 'Environments', 'Governance', 'Pricing'],
+    links: ['Background agents', 'Automations', 'Environments', 'Integrations', 'Governance', 'Pricing'],
   },
   {
     heading: 'Use cases',
-    links: ['AI code review', 'Code migration', 'CVE remediation', 'Standardization'],
+    links: ['AI code review', 'Backlog tickets', 'Bug triage', 'Code migration', 'CVE remediation', 'Docs drift'],
   },
   {
     heading: 'Compare',
@@ -18,7 +18,7 @@ const footerLinks = [
   },
   {
     heading: 'Resources',
-    links: ['Blog', 'Docs', 'Changelog', 'Events', 'Newsletter', 'Templates', 'Videos', 'Reports'],
+    links: ['Blog', 'Docs', 'Changelog', 'Events', 'Newsletter', 'Templates', 'Reports', 'Skills'],
   },
   {
     heading: 'Company',
