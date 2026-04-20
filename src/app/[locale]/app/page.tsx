@@ -857,7 +857,7 @@ export default function AppPage() {
       const target = e.target as HTMLElement;
       if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;
       e.preventDefault();
-      if (!canConfigureSuperAgent) return;
+      if (!activeId || !syncedIds.current.has(activeId)) return;
       setSuperAgentOpen(o => {
         if (!o) {
           setSuperAgentError(null);
@@ -868,7 +868,7 @@ export default function AppPage() {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [canConfigureSuperAgent]);
+  }, [activeId]);
 
   // Load conversation history from DB on mount
   useEffect(() => {
