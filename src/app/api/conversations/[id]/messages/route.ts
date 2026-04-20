@@ -1,13 +1,17 @@
 import type { NextRequest } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { authFailureResponse, getRequestAuth, isAuthFailure } from '@/libs/ApiKeys';
+import { authFailureResponse, getRequestAuth, isAuthFailure, requireApiKeyScope } from '@/libs/ApiKeys';
 import { conversationsSchema, messagesSchema } from '@/models/Schema';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getRequestAuth(req);
   if (isAuthFailure(auth)) {
     return authFailureResponse(auth);
+  }
+  const scopeFailure = requireApiKeyScope(auth, 'task_running');
+  if (scopeFailure) {
+    return authFailureResponse(scopeFailure);
   }
 
   const { id } = await params;

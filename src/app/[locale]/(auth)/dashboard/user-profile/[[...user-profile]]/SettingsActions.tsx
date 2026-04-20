@@ -7,6 +7,7 @@ type ApiKeyRecord = {
   id: string;
   name: string;
   keyPrefix: string;
+  scope: 'read_only' | 'task_running';
   requestCount: number;
   rateLimitPerHour: number;
   createdAt: string;
@@ -113,6 +114,7 @@ export function ApiKeysPanel() {
   const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [name, setName] = useState('Default key');
+  const [scope, setScope] = useState<'read_only' | 'task_running'>('task_running');
   const [baseUrl, setBaseUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -207,7 +209,7 @@ curl -N "$ONA_BASE_URL/api/chat" \\
       const response = await fetch('/api/settings/api-keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, scope }),
       });
       if (!response.ok) {
         throw new Error('Could not create API key.');
@@ -216,6 +218,7 @@ curl -N "$ONA_BASE_URL/api/chat" \\
       setNewKey(data.apiKey);
       setApiKeys(keys => [data.record, ...keys]);
       setName('Default key');
+      setScope('task_running');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not create API key.');
     } finally {
@@ -249,17 +252,26 @@ curl -N "$ONA_BASE_URL/api/chat" \\
       <div>
         <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Programmatic API access</p>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Create an API key and send it as a Bearer token in the Authorization header. Each key is limited to 60 requests per hour.
+          Create an API key and send it as a Bearer token in the Authorization header. Each key is scoped and limited to 60 requests per hour.
         </p>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="grid gap-2 sm:grid-cols-[1fr_180px_auto]">
         <input
           value={name}
           onChange={event => setName(event.target.value)}
           className="min-h-10 flex-1 rounded-xl border border-black/8 bg-transparent px-3 text-sm text-gray-900 outline-none transition focus:border-gray-500 dark:border-white/10 dark:text-gray-100"
           placeholder="Key name"
         />
+        <select
+          value={scope}
+          onChange={event => setScope(event.target.value as 'read_only' | 'task_running')}
+          className="min-h-10 rounded-xl border border-black/8 bg-transparent px-3 text-sm text-gray-900 outline-none transition focus:border-gray-500 dark:border-white/10 dark:text-gray-100"
+          aria-label="API key scope"
+        >
+          <option value="task_running">Task-running</option>
+          <option value="read_only">Read-only</option>
+        </select>
         <button
           type="button"
           onClick={createKey}
@@ -303,7 +315,7 @@ curl -N "$ONA_BASE_URL/api/chat" \\
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{key.name}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {key.keyPrefix}… · {key.revokedAt ? 'Revoked' : key.lastUsedAt ? `Last used ${new Date(key.lastUsedAt).toLocaleDateString()}` : 'Never used'}
+                      {key.keyPrefix}… · {key.scope === 'read_only' ? 'Read-only' : 'Task-running'} · {key.revokedAt ? 'Revoked' : key.lastUsedAt ? `Last used ${new Date(key.lastUsedAt).toLocaleDateString()}` : 'Never used'}
                     </p>
                     <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
                       {key.requestCount.toLocaleString()} total requests · {key.rateLimitPerHour.toLocaleString()} requests/hour
@@ -326,7 +338,7 @@ curl -N "$ONA_BASE_URL/api/chat" \\
         <div>
           <p className="text-sm font-medium text-gray-800 dark:text-gray-200">API examples</p>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Copy these commands into a terminal after creating an API key. Rate-limited responses return HTTP 429 with a retry time.
+            Copy these commands into a terminal after creating a task-running API key. Read-only keys can list conversations and poll job events, but cannot create conversations or start tasks.
           </p>
         </div>
         <div className="space-y-3">

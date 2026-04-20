@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod/v4';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
-import { getRequestAuth, isAuthFailure } from '@/libs/ApiKeys';
+import { getRequestAuth, isAuthFailure, requireApiKeyScope } from '@/libs/ApiKeys';
 import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/GitHub';
 import { daytonaToolDefinitions, isDaytonaTool, prebootSandbox, runDaytonaTool } from '@/libs/Daytona';
@@ -929,6 +929,16 @@ export async function POST(req: NextRequest) {
           status: auth.status,
           retryAfterSeconds: auth.retryAfterSeconds,
           resetAt: auth.resetAt?.toISOString(),
+        });
+        close();
+        return;
+      }
+      const scopeFailure = requireApiKeyScope(auth, 'task_running');
+      if (scopeFailure) {
+        emit({
+          type: 'error',
+          message: scopeFailure.message,
+          status: scopeFailure.status,
         });
         close();
         return;

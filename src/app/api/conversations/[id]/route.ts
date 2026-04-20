@@ -3,12 +3,16 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/libs/DB';
 import { conversationsSchema } from '@/models/Schema';
 import { deleteSandboxById } from '@/libs/Daytona';
-import { authFailureResponse, getRequestAuth, isAuthFailure } from '@/libs/ApiKeys';
+import { authFailureResponse, getRequestAuth, isAuthFailure, requireApiKeyScope } from '@/libs/ApiKeys';
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getRequestAuth(req);
   if (isAuthFailure(auth)) {
     return authFailureResponse(auth);
+  }
+  const scopeFailure = requireApiKeyScope(auth, 'task_running');
+  if (scopeFailure) {
+    return authFailureResponse(scopeFailure);
   }
 
   const { id } = await params;
@@ -26,6 +30,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const auth = await getRequestAuth(req);
   if (isAuthFailure(auth)) {
     return authFailureResponse(auth);
+  }
+  const scopeFailure = requireApiKeyScope(auth, 'task_running');
+  if (scopeFailure) {
+    return authFailureResponse(scopeFailure);
   }
 
   const { id } = await params;

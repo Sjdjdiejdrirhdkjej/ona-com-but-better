@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { desc, eq } from 'drizzle-orm';
-import { createApiKeySecret, getApiKeyPrefix, hashApiKey } from '@/libs/ApiKeys';
+import { createApiKeySecret, getApiKeyPrefix, hashApiKey, normalizeApiKeyScope } from '@/libs/ApiKeys';
 import { db } from '@/libs/DB';
 import { getSession } from '@/libs/ReplitAuth';
 import { apiKeysSchema } from '@/models/Schema';
@@ -17,6 +17,7 @@ export async function GET() {
       id: apiKeysSchema.id,
       name: apiKeysSchema.name,
       keyPrefix: apiKeysSchema.keyPrefix,
+      scope: apiKeysSchema.scope,
       requestCount: apiKeysSchema.requestCount,
       rateLimitPerHour: apiKeysSchema.rateLimitPerHour,
       createdAt: apiKeysSchema.createdAt,
@@ -36,8 +37,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => ({})) as { name?: unknown };
+  const body = await req.json().catch(() => ({})) as { name?: unknown; scope?: unknown };
   const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim().slice(0, 80) : 'Default key';
+  const scope = normalizeApiKeyScope(body.scope);
   const apiKey = createApiKeySecret();
 
   const [created] = await db
@@ -47,11 +49,13 @@ export async function POST(req: NextRequest) {
       name,
       keyHash: hashApiKey(apiKey),
       keyPrefix: getApiKeyPrefix(apiKey),
+      scope,
     })
     .returning({
       id: apiKeysSchema.id,
       name: apiKeysSchema.name,
       keyPrefix: apiKeysSchema.keyPrefix,
+      scope: apiKeysSchema.scope,
       requestCount: apiKeysSchema.requestCount,
       rateLimitPerHour: apiKeysSchema.rateLimitPerHour,
       createdAt: apiKeysSchema.createdAt,

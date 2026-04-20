@@ -7,15 +7,18 @@ import { apiKeyRateLimitsSchema, apiKeysSchema } from '@/models/Schema';
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
+export type ApiKeyScope = 'read_only' | 'task_running';
+
 export type RequestAuth = {
   userId: string;
   source: 'session' | 'api_key';
   apiKeyId?: string;
+  apiKeyScope?: ApiKeyScope;
 };
 
 export type RequestAuthFailure = {
-  error: 'invalid_api_key' | 'rate_limited';
-  status: 401 | 429;
+  error: 'invalid_api_key' | 'rate_limited' | 'insufficient_scope';
+  status: 401 | 403 | 429;
   message: string;
   limit?: number;
   remaining?: number;
@@ -33,6 +36,22 @@ export function hashApiKey(apiKey: string) {
 
 export function getApiKeyPrefix(apiKey: string) {
   return apiKey.slice(0, 12);
+}
+
+export function normalizeApiKeyScope(scope: unknown): ApiKeyScope {
+  return scope === 'read_only' ? 'read_only' : 'task_running';
+}
+
+export function requireApiKeyScope(auth: RequestAuth | null, scope: ApiKeyScope): RequestAuthFailure | null {
+  if (!auth || auth.source !== 'api_key' || scope === 'read_only' || auth.apiKeyScope === 'task_running') {
+    return null;
+  }
+
+  return {
+    error: 'insufficient_scope',
+    status: 403,
+    message: 'This API key is read-only. Create a task-running API key to perform this action.',
+  };
 }
 
 export function getBearerToken(req: NextRequest) {
@@ -136,6 +155,7 @@ export async function getRequestAuth(req: NextRequest): Promise<RequestAuth | Re
       .select({
         id: apiKeysSchema.id,
         userId: apiKeysSchema.userId,
+        scope: apiKeysSchema.scope,
         rateLimitPerHour: apiKeysSchema.rateLimitPerHour,
       })
       .from(apiKeysSchema)
@@ -163,7 +183,12 @@ export async function getRequestAuth(req: NextRequest): Promise<RequestAuth | Re
       };
     }
 
-    return { userId: apiKey.userId, source: 'api_key', apiKeyId: apiKey.id };
+    return {
+      userId: apiKey.userId,
+      source: 'api_key',
+      apiKeyId: apiKey.id,
+      apiKeyScope: normalizeApiKeyScope(apiKey.scope),
+    };
   }
 
   const session = await getSession();

@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { db } from '@/libs/DB';
-import { authFailureResponse, getRequestAuth, isAuthFailure } from '@/libs/ApiKeys';
+import { authFailureResponse, getRequestAuth, isAuthFailure, requireApiKeyScope } from '@/libs/ApiKeys';
 import { agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 
 export async function GET(req: NextRequest) {
@@ -65,6 +65,10 @@ export async function POST(req: NextRequest) {
   const auth = await getRequestAuth(req);
   if (isAuthFailure(auth)) {
     return authFailureResponse(auth);
+  }
+  const scopeFailure = requireApiKeyScope(auth, 'task_running');
+  if (scopeFailure) {
+    return authFailureResponse(scopeFailure);
   }
 
   const { id, title, sessionId } = await req.json() as { id: string; title: string; sessionId?: string };

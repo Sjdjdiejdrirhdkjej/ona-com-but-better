@@ -27,6 +27,7 @@ export const apiKeysSchema = pgTable('api_keys', {
   name: text('name').notNull(),
   keyHash: text('key_hash').notNull().unique(),
   keyPrefix: text('key_prefix').notNull(),
+  scope: text('scope').notNull().default('task_running'),
   requestCount: integer('request_count').notNull().default(0),
   rateLimitPerHour: integer('rate_limit_per_hour').notNull().default(60),
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
