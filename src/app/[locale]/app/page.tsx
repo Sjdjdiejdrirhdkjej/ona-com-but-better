@@ -689,6 +689,24 @@ export default function AppPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [sidebarOpen]);
 
+  // Cmd/Ctrl+1, +2 → switch autonomy level
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;
+      if (e.key === '1') {
+        e.preventDefault();
+        setSelectedModel(AUTONOMY_OPTIONS[0].key as string);
+      } else if (e.key === '2') {
+        e.preventDefault();
+        setSelectedModel(AUTONOMY_OPTIONS[1].key as string);
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   // Load conversation history from DB on mount
   useEffect(() => {
     async function loadHistory() {
@@ -2132,7 +2150,7 @@ export default function AppPage() {
         <div className="flex min-w-0 shrink-0 items-center justify-end gap-0.5 sm:gap-2">
           <GitHubConnect />
           <div
-            title={`Autonomy: ${AUTONOMY_OPTIONS.find(o => o.key === selectedModel)?.label ?? 'Hands on experience'}`}
+            title={`Autonomy: ${AUTONOMY_OPTIONS.find(o => o.key === selectedModel)?.label ?? 'Hands on experience'} · Switch: ⌘1 Hands on · ⌘2 Hands off`}
             className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium sm:flex ${
               selectedModel === 'ona-hands-off'
                 ? 'border-indigo-200 bg-indigo-50 text-indigo-600 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-400'
