@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import marked from 'marked';
 import hljs from 'highlight.js';
 
@@ -75,16 +75,111 @@ renderer.tablecell = function (content: string, flags: { header: boolean; align:
 
 marked.setOptions({ renderer, gfm: true, breaks: false });
 
-export default function AssistantMarkdown({ text }: { text: string }) {
-  const html = useMemo(() => {
-    const stripped = text.replace(/<think>[\s\S]*?(<\/think>|$)/g, '').trim();
-    return marked(stripped);
-  }, [text]);
+type Segment =
+  | { kind: 'think'; content: string; complete: boolean; index: number }
+  | { kind: 'content'; content: string };
+
+function parseSegments(text: string): Segment[] {
+  const segments: Segment[] = [];
+  const thinkRe = /<think>([\s\S]*?)(<\/think>|$)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let thinkIndex = 0;
+
+  while ((match = thinkRe.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ kind: 'content', content: text.slice(lastIndex, match.index) });
+    }
+    const complete = match[2] === '</think>';
+    segments.push({ kind: 'think', content: match[1] ?? '', complete, index: thinkIndex++ });
+    lastIndex = match.index + match[0].length;
+    if (!complete) break;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ kind: 'content', content: text.slice(lastIndex) });
+  }
+
+  return segments;
+}
+
+function ThinkBlock({ content, complete, index }: { content: string; complete: boolean; index: number }) {
+  const [open, setOpen] = useState(!complete);
+
+  const isLive = !complete;
 
   return (
-    <div
-      className="prose-sm max-w-none"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div className="mb-2 rounded-xl border border-slate-200 dark:border-slate-700/60 bg-slate-50/70 dark:bg-slate-900/40 overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-100/60 dark:hover:bg-slate-800/40 transition-colors"
+      >
+        {isLive
+          ? (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 text-slate-400 animate-spin">
+                <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3" strokeOpacity="0.25" />
+                <path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            )
+          : (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="shrink-0 text-slate-400">
+                <path
+                  d="M6 1.5C4.07 1.5 2.5 3.07 2.5 5c0 1.05.46 1.98 1.19 2.62V9h4.62V7.62A3.5 3.5 0 006 1.5z"
+                  stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"
+                />
+                <path d="M4.2 9h3.6M5 10.5h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+              </svg>
+            )}
+        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          {isLive ? 'Thinking…' : `Thought${index > 0 ? ` ${index + 1}` : ''}`}
+        </span>
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          className="ml-auto shrink-0 text-slate-400 transition-transform"
+          style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }}
+        >
+          <path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="border-t border-slate-200 dark:border-slate-700/60 px-3 py-2.5 max-h-72 overflow-y-auto">
+          <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            {content.trim()}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function AssistantMarkdown({ text }: { text: string }) {
+  const segments = useMemo(() => parseSegments(text), [text]);
+
+  return (
+    <div className="prose-sm max-w-none">
+      {segments.map((seg, i) => {
+        if (seg.kind === 'think') {
+          return (
+            <ThinkBlock
+              key={`think-${seg.index}`}
+              content={seg.content}
+              complete={seg.complete}
+              index={seg.index}
+            />
+          );
+        }
+        const html = marked(seg.content.trim());
+        if (!html.trim()) return null;
+        return (
+          <div
+            key={`content-${i}`}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        );
+      })}
+    </div>
   );
 }
