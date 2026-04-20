@@ -782,6 +782,10 @@ export default function AppPage() {
   // that any poll fetch already in-flight when polling is stopped can detect
   // the change on return and discard its results, preventing stale writes.
   const bgPollGenRef = useRef<Map<string, number>>(new Map());
+  // Tracks consecutive 404 responses per jobId. After MAX_POLL_404S the job is
+  // considered gone (server never created it or DB was wiped) and polling stops.
+  const pollConsecutive404sRef = useRef<Map<string, number>>(new Map());
+  const MAX_POLL_404S = 8;
   const abortControllerRef = useRef<AbortController | null>(null);
   // Tracks conversations where the SSE stream is confirmed to be delivering
   // events in real-time. Polling skips applying content/tool events for these
@@ -924,12 +928,28 @@ export default function AppPage() {
       // Discard results if polling was stopped (generation bumped) while fetching.
       if ((bgPollGenRef.current.get(convId) ?? 0) !== myGen) return;
       if (!res.ok) {
-        // Polling is the fallback when SSE is buffered or intentionally aborted.
-        // A transient non-OK response here must not leave the composer stuck in
-        // a loading/initial-sandbox state with no further retries.
+        if (res.status === 404) {
+          // 404 means the job was never created (DB insert failed on the server
+          // side or a stale in-memory activeJobId survived a page reload). After
+          // MAX_POLL_404S consecutive misses we give up to avoid an infinite loop.
+          const misses = (pollConsecutive404sRef.current.get(jobId) ?? 0) + 1;
+          pollConsecutive404sRef.current.set(jobId, misses);
+          if (misses >= MAX_POLL_404S) {
+            pollConsecutive404sRef.current.delete(jobId);
+            stopBackgroundPoll(convId);
+            setLoading(false);
+            setConversations(prev => prev.map(c =>
+              c.id === convId ? { ...c, activeJobId: null } : c,
+            ));
+            return;
+          }
+        }
+        // Transient non-OK: keep retrying (exponential-ish backoff via normal schedule).
         scheduleBackgroundPoll(convId, jobId, cursor, rebuild);
         return;
       }
+      // Successful response — reset the 404 miss counter.
+      pollConsecutive404sRef.current.delete(jobId);
       const data = await res.json() as {
         events: Array<{ id: number; type: string; data: Record<string, unknown> }>;
         done: boolean;

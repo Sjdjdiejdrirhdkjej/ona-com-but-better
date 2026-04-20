@@ -43,6 +43,7 @@ externalPort = 80
 [userenv]
 
 [userenv.shared]
+SUPER_AGENT_HEARTBEAT_SECRET = "a15bc3a230d7199204285ca2a4138dafb95d785364f079d3ac3dcd497fdb30ed"
 
 [userenv.development]
 
