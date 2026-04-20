@@ -103,6 +103,17 @@ curl -N "$ONA_BASE_URL/api/chat" \\
       code: `curl "$ONA_BASE_URL/api/jobs/$JOB_ID/events?after=0" \\
   -H "Authorization: Bearer $ONA_API_KEY"`,
     },
+    {
+      title: 'Wake super agents on a heartbeat',
+      description: 'Point your scheduler at this route to wake any enabled super agents whose heartbeat is due.',
+      code: `export ONA_HEARTBEAT_SECRET="replace-me"
+
+curl "$ONA_BASE_URL/api/super-agent/heartbeat" \\
+  -X POST \\
+  -H "x-ona-heartbeat-secret: $ONA_HEARTBEAT_SECRET" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "limit": 1 }'`,
+    },
   ];
 
   return (
