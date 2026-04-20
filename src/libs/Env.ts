@@ -1,4 +1,5 @@
 export const Env = {
+  CREDITS_PER_1000_TOKENS: process.env.CREDITS_PER_1000_TOKENS,
   DATABASE_URL: process.env.DATABASE_URL,
   DAYTONA_API_KEY: process.env.DAYTONA_API_KEY,
   FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY,
@@ -21,4 +22,5 @@ export const Env = {
   POSTGRES_URL_NON_POOLING: process.env.POSTGRES_URL_NON_POOLING,
   REPL_ID: process.env.REPL_ID,
   SESSION_SECRET: process.env.SESSION_SECRET,
+  SIGNUP_CREDITS: process.env.SIGNUP_CREDITS,
 };

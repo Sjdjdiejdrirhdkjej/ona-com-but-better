@@ -4,6 +4,7 @@ import { z } from 'zod/v4';
 import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
 import { getRequestAuth, isAuthFailure, requireApiKeyScope } from '@/libs/ApiKeys';
+import { deductCreditsForUsage, getUserCredits } from '@/libs/Credits';
 import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/GitHub';
 import { daytonaToolDefinitions, isDaytonaTool, prebootSandbox, runDaytonaTool } from '@/libs/Daytona';
@@ -933,6 +934,29 @@ export async function POST(req: NextRequest) {
         close();
         return;
       }
+      if (!auth) {
+        emit({ type: 'error', message: 'Authentication required.', status: 401 });
+        close();
+        return;
+      }
+      const billedUserId = auth.userId;
+      const authSource = auth.source;
+
+      // Pre-flight balance check — reject with 402 Payment Required when the
+      // caller has exhausted their credits. Applies uniformly to session and
+      // API-key callers; subsequent provider calls would go further negative.
+      const currentBalance = await getUserCredits(billedUserId);
+      if (currentBalance <= 0) {
+        emit({
+          type: 'error',
+          message: 'Insufficient credits. Top up your balance to continue using the AI.',
+          status: 402,
+          credits: currentBalance,
+        });
+        close();
+        return;
+      }
+
       const scopeFailure = requireApiKeyScope(auth, 'task_running');
       if (scopeFailure) {
         emit({
@@ -1000,8 +1024,26 @@ export async function POST(req: NextRequest) {
       }
 
       async function streamChargedFireworksCall(body: Record<string, unknown>, onDelta: (delta: string) => void) {
-        const apiMessages = Array.isArray(body.messages) ? body.messages as ApiMessage[] : [];
         const result = await streamFireworksCall(body, onDelta, fireworksModelId);
+        // Bill the authenticated user for this top-level provider call. Applies
+        // uniformly to session-authed UI callers and API-key callers so API
+        // usage is metered the same as interactive usage. (Subagent calls —
+        // Oracle/Librarian/Editor/BrowserUse — go through their own fetches
+        // and are not billed here.) `deductCreditsForUsage` swallows DB errors
+        // internally, so we don't wrap it.
+        if (result.usage) {
+          const deduction = await deductCreditsForUsage(billedUserId, result.usage);
+          if (deduction && deduction.balance !== null) {
+            const payload = {
+              type: 'credit_update',
+              credits: deduction.balance,
+              cost: deduction.cost,
+              source: authSource,
+            };
+            emit(payload);
+            if (jobId) await persistJobEvent(jobId, 'credit_update', payload);
+          }
+        }
         return result;
       }
 

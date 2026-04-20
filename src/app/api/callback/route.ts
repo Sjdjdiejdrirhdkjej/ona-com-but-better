@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { seedUserCreditsIfNew } from '@/libs/Credits';
 import { authorizationCodeGrant, getAppBaseUrl, getRedirectUri, getReplitOidcConfig, getSafeReturnPath, getSession } from '@/libs/ReplitAuth';
 import { AppConfig } from '@/utils/AppConfig';
 
@@ -165,6 +166,10 @@ export async function GET(request: NextRequest) {
     delete session.authOrigin;
     delete session.authHandoff;
     await session.save();
+
+    // Seed a starting credit balance on first sign-in so new users don't hit
+    // the 402 gate on /api/chat. Idempotent — no-op for returning users.
+    await seedUserCreditsIfNew(claims.sub);
 
     return authCompleteResponse(baseUrl, returnTo, !!authHandoff);
   } catch (err) {

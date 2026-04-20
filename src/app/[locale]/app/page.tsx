@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GitHubConnect } from '@/components/GitHubConnect';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { CreditsChip } from '@/components/CreditsChip';
 import { UserDropdown } from '@/components/UserDropdown';
 import { copyTextToClipboard, createBrowserId, observeElementSize } from '@/utils/browserCompat';
 
@@ -2392,6 +2393,7 @@ export default function AppPage() {
                 </button>
               )}
           <ThemeToggle />
+          <CreditsChip />
           <UserDropdown />
           <button
             onClick={() => setSidebarOpen(o => !o)}
