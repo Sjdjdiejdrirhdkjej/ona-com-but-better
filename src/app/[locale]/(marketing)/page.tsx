@@ -166,13 +166,13 @@ export default async function Index(props: IIndexProps) {
       <section className="mx-auto grid min-h-[calc(100svh-3.5rem)] max-w-7xl grid-cols-1 border-x border-black/8 px-4 pb-12 pt-14 dark:border-white/10 sm:px-8 md:grid-cols-12 md:items-center md:gap-8 md:pt-10">
         <div className="md:col-span-9 md:col-start-3 lg:col-span-8 lg:col-start-4">
           <h1
-            className="max-w-5xl text-[clamp(3.15rem,15vw,9rem)] leading-[0.86] tracking-[-0.07em] text-neutral-950 dark:text-neutral-50 sm:leading-[0.82] sm:tracking-[-0.075em]"
+            className="max-w-5xl text-[clamp(3.15rem,15vw,9rem)] leading-[0.92] tracking-[-0.07em] text-neutral-950 dark:text-neutral-50 sm:leading-[0.9] sm:tracking-[-0.075em]"
             style={{ fontFamily: SERIF, fontWeight: 400 }}
           >
             <span className="block italic tracking-[-0.085em]">The platform for</span>
             <span className="block">background agents</span>
           </h1>
-          <div className="mt-8 grid gap-6 sm:mt-10 md:grid-cols-[minmax(0,26rem)_auto] md:items-start">
+          <div className="mt-10 grid gap-6 sm:mt-12 md:grid-cols-[minmax(0,26rem)_auto] md:items-start">
             <p className="max-w-xl text-lg leading-snug tracking-[-0.03em] text-neutral-900 dark:text-neutral-200 sm:text-2xl">
               Run a team of AI software engineers in the cloud.
               <br className="hidden sm:block" />
@@ -436,7 +436,7 @@ export default async function Index(props: IIndexProps) {
       </section>
 
       <section className="mx-auto max-w-7xl border-x border-t border-black/8 px-4 py-14 text-center dark:border-white/10 sm:px-8 sm:py-20">
-        <h2 className="mx-auto max-w-4xl text-[clamp(3rem,14vw,8.5rem)] leading-[0.84] tracking-[-0.075em] text-neutral-950 dark:text-neutral-50 sm:leading-[0.78] sm:tracking-[-0.08em]" style={{ fontFamily: SERIF, fontWeight: 400 }}>
+        <h2 className="mx-auto max-w-4xl text-[clamp(3rem,14vw,8.5rem)] leading-[0.92] tracking-[-0.075em] text-neutral-950 dark:text-neutral-50 sm:leading-[0.88] sm:tracking-[-0.08em]" style={{ fontFamily: SERIF, fontWeight: 400 }}>
           Start shipping with ONA but OPEN SOURCE
         </h2>
         <p className="mx-auto mt-8 max-w-md text-lg text-neutral-700 dark:text-neutral-300">No commitment. No setup. Just start.</p>

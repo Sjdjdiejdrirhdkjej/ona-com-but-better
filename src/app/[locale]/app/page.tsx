@@ -2137,17 +2137,17 @@ export default function AppPage() {
         className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-black/6 px-2.5 text-xs dark:border-white/8 sm:h-10 sm:px-5"
         style={{ backgroundColor: 'var(--bg-header)', backdropFilter: 'blur(14px)' }}
       >
-        <Link href="/" className="flex min-w-0 shrink items-center gap-1.5 truncate font-semibold tracking-tight text-gray-950 dark:text-gray-50 sm:mr-2 sm:gap-2">
+        <Link href="/" className="flex min-w-0 shrink-0 basis-0 grow items-center gap-1.5 truncate font-semibold tracking-tight text-gray-950 dark:text-gray-50 sm:mr-2 sm:gap-2">
           <span className="flex size-5 items-center justify-center rounded-full bg-gray-950 text-[10px] text-white dark:bg-gray-100 dark:text-gray-950">O</span>
           <span className="hidden sm:inline">{APP_NAME}</span>
           <span className="sm:hidden">ONA</span>
         </Link>
-        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-6 text-[11px] text-gray-500 dark:text-gray-400 md:flex">
+        <nav className="hidden shrink-0 items-center gap-6 text-[11px] text-gray-500 dark:text-gray-400 md:flex">
           <Link href="/app" className="transition-colors hover:text-gray-950 dark:hover:text-gray-100">Tasks</Link>
           <button type="button" onClick={() => setSidebarOpen(true)} className="transition-colors hover:text-gray-950 dark:hover:text-gray-100">History</button>
           <Link href="/" className="transition-colors hover:text-gray-950 dark:hover:text-gray-100">Home</Link>
         </nav>
-        <div className="flex min-w-0 shrink-0 items-center justify-end gap-0.5 sm:gap-2">
+        <div className="flex min-w-0 shrink-0 basis-0 grow items-center justify-end gap-0.5 sm:gap-2">
           <GitHubConnect />
           <div
             title={`Autonomy: ${AUTONOMY_OPTIONS.find(o => o.key === selectedModel)?.label ?? 'Hands on experience'} · Switch: ⌘1 Hands on · ⌘2 Hands off`}
