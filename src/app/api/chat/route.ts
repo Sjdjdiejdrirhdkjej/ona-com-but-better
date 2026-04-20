@@ -768,6 +768,64 @@ function estimateMessagesTokens(messages: ApiMessage[]): number {
   }, 0);
 }
 
+// ── Context compression ────────────────────────────────────────────────────
+// When the conversation grows beyond this threshold, older messages are
+// compressed into a brief summary to prevent context-window exhaustion.
+const CONTEXT_COMPRESS_TOKENS = 60000;
+const CONTEXT_WARN_TOKENS = 40000;
+const CONTEXT_KEEP_LAST = 14; // always preserve the most recent N messages verbatim
+
+function compressConversationHistory(
+  messages: ApiMessage[],
+  currentTodos: TodoItem[],
+): { messages: ApiMessage[]; compressed: boolean } {
+  const estimated = estimateMessagesTokens(messages);
+  if (estimated < CONTEXT_COMPRESS_TOKENS) return { messages, compressed: false };
+  // Need at least system + first-user + KEEP_LAST + 2 for the compression wrapper
+  if (messages.length <= CONTEXT_KEEP_LAST + 4) return { messages, compressed: false };
+
+  const systemMsg = messages[0]!;
+  const firstUserMsg = messages[1]!;
+  const tail = messages.slice(-CONTEXT_KEEP_LAST);
+  const body = messages.slice(2, -CONTEXT_KEEP_LAST);
+
+  // Summarise what happened in the compressed body
+  const toolCallBatches = body.filter(
+    m => m.role === 'assistant' && Array.isArray(m.tool_calls) && (m.tool_calls?.length ?? 0) > 0,
+  );
+  const toolNamesSeen = toolCallBatches
+    .flatMap(m => (m.tool_calls ?? []).map(tc => tc.function.name))
+    .slice(0, 30);
+  const uniqueTools = [...new Set(toolNamesSeen)];
+
+  const todoSummary = currentTodos.length > 0
+    ? currentTodos.map(t => `  [${t.status}] ${t.task}`).join('\n')
+    : '  (none written yet)';
+
+  const compressionNote = [
+    `[CONTEXT COMPRESSED — ${body.length} prior messages removed to free context space]`,
+    `Tool-call batches in compressed history: ${toolCallBatches.length}`,
+    `Tools used: ${uniqueTools.join(', ') || 'none'}`,
+    ``,
+    `Current todo list at time of compression:`,
+    todoSummary,
+    ``,
+    `The original task (first message) and the most recent ${CONTEXT_KEEP_LAST} messages are preserved verbatim below.`,
+    `Call todo_read at any time to refresh your current task state.`,
+  ].join('\n');
+
+  return {
+    messages: [
+      systemMsg,
+      firstUserMsg,
+      { role: 'user', content: compressionNote },
+      { role: 'assistant', content: 'Understood. I have reviewed the compression summary and will continue working from my current todo state.' },
+      ...tail,
+    ],
+    compressed: true,
+  };
+}
+
 
 function parseToolArgs(value: string): Record<string, unknown> {
   try {
@@ -1146,7 +1204,34 @@ export async function POST(req: NextRequest) {
       const recentBatchSigs: string[] = [];
       let loopRecoveryAttempts = 0;
 
+      // Consecutive error escalation: if tool calls keep failing across multiple
+      // iterations, force the agent to consult Oracle for a new plan.
+      let consecutiveErrorIterations = 0;
+
+      // Context budget warning: injected once when the conversation reaches
+      // CONTEXT_WARN_TOKENS, prompting the agent to work efficiently.
+      let contextBudgetWarned = false;
+
       for (let iteration = 0; iteration < MAX_AGENT_ITERATIONS; iteration++) {
+        // ── Context compression & budget check ─────────────────────────────
+        // Run before every LLM call so the model always has headroom to reason.
+        const { messages: compressedMessages, compressed } = compressConversationHistory(conversation, todos);
+        if (compressed) {
+          conversation.length = 0;
+          conversation.push(...compressedMessages);
+          emit({ type: 'context_compressed' });
+          if (jobId) persistJobEvent(jobId, 'context_compressed', { iteration }).catch(() => {});
+        }
+
+        if (!contextBudgetWarned && estimateMessagesTokens(conversation) >= CONTEXT_WARN_TOKENS) {
+          contextBudgetWarned = true;
+          conversation.push({
+            role: 'user',
+            content: '[System] Context budget is getting large. Be concise in your tool calls and avoid re-reading files you have already seen this session. Prioritize completing your remaining todos efficiently.',
+          });
+        }
+        // ───────────────────────────────────────────────────────────────────
+
         let iterText = '';
         const { content, toolCalls, finishReason } = await streamChargedFireworksCall(
           {
@@ -1432,6 +1517,28 @@ export async function POST(req: NextRequest) {
 
         emit({ type: 'tool_done' });
         if (jobId) await persistJobEvent(jobId, 'tool_done', {});
+
+        // ── Consecutive error escalation ─────────────────────────────────────
+        // If every tool in the batch errored, count it as a bad iteration.
+        // After 3 consecutive all-error iterations, force an Oracle consultation.
+        const hadAnyError = toolSteps.some(s => s.status === 'error');
+        const hadAnySuccess = toolSteps.some(s => s.status === 'done');
+        if (hadAnyError && !hadAnySuccess) {
+          consecutiveErrorIterations += 1;
+        } else {
+          consecutiveErrorIterations = 0;
+        }
+
+        if (consecutiveErrorIterations >= 3) {
+          consecutiveErrorIterations = 0;
+          conversation.push({
+            role: 'user',
+            content: '[Autonomy recovery — repeated tool failures] Every tool call has errored for 3 consecutive iterations. Stop retrying the same approach. Call `call_oracle` right now to get a fresh diagnostic plan, then follow a completely different strategy.',
+          });
+          emit({ type: 'error_escalation' });
+          if (jobId) persistJobEvent(jobId, 'error_escalation', { iteration }).catch(() => {});
+        }
+        // ────────────────────────────────────────────────────────────────────
       }
 
       if (!completed) {
