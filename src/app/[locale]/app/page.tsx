@@ -17,6 +17,7 @@ const SERIF = 'Georgia, "Times New Roman", serif';
 const APP_NAME = 'ONA but OPEN SOURCE';
 const AUTONOMY_OPTIONS = [
   { key: 'ona-max', label: 'Hands on experience' },
+  { key: 'ona-hands-off', label: 'Hands off experience' },
 ] as const;
 const PROMPT_SUGGESTIONS = [
   { label: 'Backlog sweep', prompt: 'Inspect connected backlog items, identify one well-scoped engineering task, implement it in a branch, run checks, and prepare a pull request summary.' },

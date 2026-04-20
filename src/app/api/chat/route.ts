@@ -86,19 +86,18 @@ const ULTRAWORK_TOOLS = [TODO_WRITE_TOOL, TODO_READ_TOOL, TASK_COMPLETE_TOOL];
 
 export const ONA_MODELS = {
   'ona-max': {
-    label: 'ONA Max',
+    label: 'Hands on experience',
     description: 'GLM 5.1 — most capable',
     fireworksId: 'accounts/fireworks/models/glm-5p1',
+    maxTokens: 16384,
+    temperature: 0.08,
   },
-  'ona-max-fast': {
-    label: 'ONA Max Fast',
-    description: 'Kimi K2.5 Turbo — fast & smart',
-    fireworksId: 'accounts/fireworks/routers/kimi-k2p5-turbo',
-  },
-  'ona-mini': {
-    label: 'ONA Mini',
-    description: 'DeepSeek V3.2 — lightweight & strong tool use',
-    fireworksId: 'accounts/fireworks/models/deepseek-v3p2',
+  'ona-hands-off': {
+    label: 'Hands off experience',
+    description: 'GLM 5.1 — maximum autonomy, deep reasoning, quality over speed',
+    fireworksId: 'accounts/fireworks/models/glm-5p1',
+    maxTokens: 65536,
+    temperature: 0.0,
   },
 } as const;
 
@@ -874,9 +873,13 @@ export async function POST(req: NextRequest) {
       }
 
       const { messages, conversationId, assistantMessageId, jobId: clientJobId, model } = parsed.data;
-      const fireworksModelId = model && model in ONA_MODELS
-        ? ONA_MODELS[model as OnaModelKey].fireworksId
-        : undefined;
+      const modelConfig = model && model in ONA_MODELS
+        ? ONA_MODELS[model as OnaModelKey]
+        : ONA_MODELS['ona-max'];
+      const fireworksModelId = modelConfig.fireworksId;
+      const agentMaxTokens = modelConfig.maxTokens;
+      const agentTemperature = modelConfig.temperature;
+      const isHandsOff = model === 'ona-hands-off';
       jobId = conversationId ? (clientJobId ?? crypto.randomUUID()) : null;
       let pendingContentEvent = '';
       let contentFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -924,8 +927,10 @@ export async function POST(req: NextRequest) {
 
       const githubToken = await getGitHubToken();
 
+      const HANDS_OFF_CONTEXT = `\n\n---\n\n## AUTONOMY MODE: HANDS OFF\n\nYou are operating in **maximum autonomy mode**. The user has explicitly requested full hands-off execution — they will not intervene or answer questions mid-task. Apply these elevated standards:\n\n- **Think longer, act more carefully.** Before every implementation decision, pause to consider alternatives, edge cases, and failure modes.\n- **Use Oracle liberally.** For any decision that has more than one valid approach — architecture, schema design, API shape, security tradeoffs — call \`call_oracle\` to reason it through before committing.\n- **Use Librarian before every external dependency.** Never assume an API shape, package version, or config format is correct. Always verify.\n- **Verify everything.** Run sandbox tests. If the repo has a CI script, run it. Do not open a PR unless the code is proven to work.\n- **Resolve ambiguity yourself.** If the prompt is underspecified, pick the most reasonable interpretation, implement it fully, and document your reasoning in the PR body or final summary.\n- **Quality over speed.** Taking 40 tool calls to produce a correct, verified result is better than 10 tool calls producing a broken one.\n- **Never stop early.** Do not ask the user if they want you to continue. Do not produce partial results. Deliver the complete, verified outcome.`;
+
       const conversation: ApiMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: isHandsOff ? SYSTEM_PROMPT + HANDS_OFF_CONTEXT : SYSTEM_PROMPT },
         ...normalizeMessages(messages),
       ];
 
@@ -970,7 +975,7 @@ export async function POST(req: NextRequest) {
         for (;;) {
           let iterText = '';
           const { content, toolCalls, finishReason } = await streamChargedFireworksCall(
-            { messages: conversation, tools: noGhTools, tool_choice: 'auto', max_tokens: 12000, temperature: 0.08, reasoning_effort: 'high' },
+            { messages: conversation, tools: noGhTools, tool_choice: 'auto', max_tokens: agentMaxTokens, temperature: agentTemperature, reasoning_effort: 'high' },
             (delta) => {
               emit({ delta });
               iterText += delta;
@@ -1148,8 +1153,8 @@ export async function POST(req: NextRequest) {
             messages: conversation,
             tools: [...githubToolDefinitions, ...daytonaToolDefinitions, callLibrarianToolDefinition, callBrowserUseToolDefinition, callOracleToolDefinition, ...ULTRAWORK_TOOLS],
             tool_choice: 'auto',
-            max_tokens: 16384,
-            temperature: 0.08,
+            max_tokens: agentMaxTokens,
+            temperature: agentTemperature,
             reasoning_effort: 'high',
           },
           (delta) => {
