@@ -16,7 +16,7 @@ const AssistantMarkdownLazy = dynamic(() => import('@/components/AssistantMarkdo
 const SERIF = 'Georgia, "Times New Roman", serif';
 const APP_NAME = 'ONA but OPEN SOURCE';
 const MODEL_OPTIONS = [
-  { key: 'ona-max', label: 'ONA Max Accuracy' },
+  { key: 'ona-max', label: 'ONA Max' },
   { key: 'ona-max-fast', label: 'ONA Max Fast' },
   { key: 'ona-mini', label: 'ONA Mini' },
 ] as const;
