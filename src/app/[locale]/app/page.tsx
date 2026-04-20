@@ -2431,7 +2431,7 @@ export default function AppPage() {
                       className="mb-5 max-w-xl text-center text-2xl leading-tight text-gray-900 dark:text-gray-100 sm:mb-6 sm:text-4xl"
                       style={{ fontFamily: SERIF, fontWeight: 400 }}
                     >
-                      What should your background agent ship?
+                      What should Ona ship?
                     </h1>
                     <div className="relative w-full max-w-2xl">
                       {/* @ mention file picker */}
