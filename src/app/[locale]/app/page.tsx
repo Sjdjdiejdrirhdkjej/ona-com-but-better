@@ -47,6 +47,7 @@ type ToolStep = {
   librarianReport?: string;
   browserReport?: string;
   oracleReport?: string;
+  editorReport?: string;
   touchedFiles?: TouchedFileDiff[];
 };
 
@@ -291,11 +292,13 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
           const hasReport = !!step.librarianReport;
           const hasBrowserReport = !!step.browserReport;
           const hasOracleReport = !!step.oracleReport;
+          const hasEditorReport = !!step.editorReport;
           const hasDiff = !!(step.touchedFiles && step.touchedFiles.length > 0);
           const isOpen = expandedLabels.has(step.label) || (step.status === 'running' && hasSubSteps);
           const isReportOpen = expandedReports.has(step.label);
           const isBrowserReportOpen = expandedReports.has(`${step.label}::browser`);
           const isOracleReportOpen = expandedReports.has(`${step.label}::oracle`);
+          const isEditorReportOpen = expandedReports.has(`${step.label}::editor`);
           const isDiffOpen = expandedReports.has(`${step.label}::diff`);
           return (
             <div key={i}>
@@ -372,6 +375,17 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
                     {isOracleReportOpen ? 'Hide oracle' : 'Oracle report'}
                   </button>
                 )}
+                {hasEditorReport && (
+                  <button
+                    onClick={() => toggleReport(`${step.label}::editor`)}
+                    className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-amber-500 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 8l1.5-1.5 4-4L9 1 9 2.5 5 6.5 3.5 8H2z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+                    </svg>
+                    {isEditorReportOpen ? 'Hide editor' : 'Editor report'}
+                  </button>
+                )}
               </div>
               {hasSubSteps && isOpen && (
                 <div className="mt-1.5 ml-4 pl-3 space-y-1 border-l border-gray-200 dark:border-gray-700">
@@ -410,6 +424,11 @@ function ToolStepsBlock({ steps }: { steps: ToolStep[] }) {
               {hasOracleReport && isOracleReportOpen && (
                 <div className="mt-2 ml-4 rounded-xl border border-purple-100 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
                   <AssistantMarkdownLazy text={step.oracleReport!} />
+                </div>
+              )}
+              {hasEditorReport && isEditorReportOpen && (
+                <div className="mt-2 ml-4 rounded-xl border border-amber-100 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/30 px-3 py-2.5 max-h-96 overflow-y-auto text-xs text-gray-700 dark:text-gray-300">
+                  <AssistantMarkdownLazy text={step.editorReport!} />
                 </div>
               )}
             </div>
@@ -916,6 +935,58 @@ export default function AppPage() {
               const parentLabel = ev.data.parentLabel as string;
               const report = ev.data.report as string;
               messages = applyStepUpdate(messages, s => s.label === parentLabel, s => ({ ...s, librarianReport: report }));
+            } else if (ev.type === 'librarian_pro_step_start') {
+              const parentLabel = ev.data.parentLabel as string;
+              const step = ev.data.step as string;
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({ ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }),
+              );
+            } else if (ev.type === 'librarian_pro_step_complete') {
+              const parentLabel = ev.data.parentLabel as string;
+              const step = ev.data.step as string;
+              const hasError = !!ev.data.error;
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({
+                  ...s,
+                  subSteps: (s.subSteps ?? []).map(sub =>
+                    sub.label === step ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] } : sub,
+                  ),
+                }),
+              );
+            } else if (ev.type === 'librarian_pro_report') {
+              const parentLabel = ev.data.parentLabel as string;
+              const report = ev.data.report as string;
+              messages = applyStepUpdate(messages, s => s.label === parentLabel, s => ({ ...s, librarianReport: report }));
+            } else if (ev.type === 'editor_step_start') {
+              const parentLabel = ev.data.parentLabel as string;
+              const step = ev.data.step as string;
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({ ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }),
+              );
+            } else if (ev.type === 'editor_step_complete') {
+              const parentLabel = ev.data.parentLabel as string;
+              const step = ev.data.step as string;
+              const hasError = !!ev.data.error;
+              messages = applyStepUpdate(
+                messages,
+                s => s.label === parentLabel,
+                s => ({
+                  ...s,
+                  subSteps: (s.subSteps ?? []).map(sub =>
+                    sub.label === step ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] } : sub,
+                  ),
+                }),
+              );
+            } else if (ev.type === 'editor_report') {
+              const parentLabel = ev.data.parentLabel as string;
+              const report = ev.data.report as string;
+              messages = applyStepUpdate(messages, s => s.label === parentLabel, s => ({ ...s, editorReport: report }));
             } else if (ev.type === 'browser_use_step_start') {
               const parentLabel = ev.data.parentLabel as string;
               const step = ev.data.step as string;
@@ -1567,6 +1638,136 @@ export default function AppPage() {
                           ...m,
                           content: (m.content as ToolStep[]).map(s =>
                             s.label === parentLabel ? { ...s, librarianReport: report } : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'librarian_pro_step_start' && json.parentLabel && json.step) {
+              const { parentLabel, step } = json as { parentLabel: string; step: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel
+                              ? { ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'librarian_pro_step_complete' && json.parentLabel && json.step) {
+              const { parentLabel, step, error: hasError } = json as { parentLabel: string; step: string; error?: boolean };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel
+                              ? {
+                                  ...s,
+                                  subSteps: (s.subSteps ?? []).map(sub =>
+                                    sub.label === step
+                                      ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] }
+                                      : sub,
+                                  ),
+                                }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'librarian_pro_report' && json.parentLabel && json.report) {
+              const { parentLabel, report } = json as { parentLabel: string; report: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel ? { ...s, librarianReport: report } : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'editor_step_start' && json.parentLabel && json.step) {
+              const { parentLabel, step } = json as { parentLabel: string; step: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel
+                              ? { ...s, subSteps: [...(s.subSteps ?? []), { label: step, status: 'running' as const }] }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'editor_step_complete' && json.parentLabel && json.step) {
+              const { parentLabel, step, error: hasError } = json as { parentLabel: string; step: string; error?: boolean };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel
+                              ? {
+                                  ...s,
+                                  subSteps: (s.subSteps ?? []).map(sub =>
+                                    sub.label === step
+                                      ? { ...sub, status: (hasError ? 'error' : 'done') as SubStep['status'] }
+                                      : sub,
+                                  ),
+                                }
+                              : s,
+                          ),
+                        }
+                      : m,
+                  ),
+                };
+              }));
+            } else if (json.type === 'editor_report' && json.parentLabel && json.report) {
+              const { parentLabel, report } = json as { parentLabel: string; report: string };
+              setConversations(prev => prev.map(c => {
+                if (c.id !== convId) return c;
+                return {
+                  ...c,
+                  messages: c.messages.map(m =>
+                    m.role === 'tool_steps'
+                      ? {
+                          ...m,
+                          content: (m.content as ToolStep[]).map(s =>
+                            s.label === parentLabel ? { ...s, editorReport: report } : s,
                           ),
                         }
                       : m,

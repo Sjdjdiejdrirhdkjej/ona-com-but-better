@@ -6,8 +6,7 @@ import { logger } from '@/libs/Logger';
 import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 import { getGitHubToken, githubToolDefinitions, runGitHubTool } from '@/libs/GitHub';
 import { daytonaToolDefinitions, isDaytonaTool, prebootSandbox, runDaytonaTool } from '@/libs/Daytona';
-import { callLibrarianToolDefinition, isCallLibrarianTool, runLibrarianSubagent } from '@/libs/Librarian';
-import { callBrowserUseToolDefinition, isCallBrowserUseTool, runBrowserUseSubagent } from '@/libs/BrowserUse';
+import { callLibrarianProToolDefinition, isCallLibrarianProTool, runLibrarianProSubagent } from '@/libs/LibrarianPro';
 import { callOracleToolDefinition, isCallOracleTool, runOracleSubagent } from '@/libs/Oracle';
 import { callEditorToolDefinition, isCallEditorTool, runEditorSubagent } from '@/libs/Editor';
 import type { TouchedFileDiff } from '@/libs/FileDiff';
@@ -152,14 +151,13 @@ Match effort to risk. For simple factual or explanatory answers, answer directly
 - build and maintain a visible todo list,
 - inspect the actual code before deciding,
 - call \`call_oracle\` early for complex architecture, debugging strategy, risky migrations, security-sensitive work, or ambiguous multi-step plans,
-- call \`call_librarian\` before relying on external/library/API knowledge,
-- call \`call_browser_use\` for live web or end-to-end UI verification,
+- call \`call_librarian_pro\` before relying on external/library/API knowledge, or for live web and UI verification,
 - verify with the most relevant sandbox command before reporting done.
 
 When accuracy conflicts with speed, choose accuracy for user-facing, production, security, billing, auth, database, and deployment tasks.
 
 ### 4. Research before implementing
-Before writing code that uses any library, API, or framework you have not explicitly seen working in this conversation: call \`call_librarian\` first. A single librarian call is far cheaper than implementing against the wrong API and fixing it afterward.
+Before writing code that uses any library, API, or framework you have not explicitly seen working in this conversation: call \`call_librarian_pro\` first. A single research call is far cheaper than implementing against the wrong API and fixing it afterward.
 
 ### 5. Verify before reporting
 Before opening a PR or claiming a task is complete:
@@ -172,14 +170,14 @@ Every file path, branch name, commit SHA, PR URL, function signature, package ve
 
 **Grounding checklist** (mentally verify before every substantive claim):
 - Did a tool return this file path? If not, use \`github_get_file_tree\` or \`github_search_code\` to find it.
-- Did a tool return this function signature or package version? If not, call \`call_librarian\` to confirm it.
-- Did a tool return this URL or endpoint? If not, call \`call_librarian\` or \`call_browser_use\` to verify it.
-- Is this a library API or configuration shape? Then call \`call_librarian\` before writing code — your training data is outdated.
+- Did a tool return this function signature or package version? If not, call \`call_librarian_pro\` to confirm it.
+- Did a tool return this URL or endpoint? If not, call \`call_librarian_pro\` to verify it.
+- Is this a library API or configuration shape? Then call \`call_librarian_pro\` before writing code — your training data is outdated.
 
 When you catch yourself about to state something you cannot point to in a tool result from this session: **stop, use a tool to get the evidence, then proceed**.
 
 ### 7. Knowledge cutoff — external facts expire
-Your training knowledge is frozen at a past date. For anything outside the repository itself (npm packages, GitHub APIs, cloud service endpoints, framework APIs, CLI flag syntax, environment variable names, config file formats): treat your recalled knowledge as a **starting hypothesis only** — always verify with \`call_librarian\` before writing code. A single librarian call is far cheaper than shipping broken code.
+Your training knowledge is frozen at a past date. For anything outside the repository itself (npm packages, GitHub APIs, cloud service endpoints, framework APIs, CLI flag syntax, environment variable names, config file formats): treat your recalled knowledge as a **starting hypothesis only** — always verify with \`call_librarian_pro\` before writing code. A single research call is far cheaper than shipping broken code.
 
 ### 8. Ultrawork loop — plan, track, and complete
 You run inside an enforcement loop. For any multi-step task:
@@ -219,7 +217,7 @@ Single-turn answers (no multi-step work needed) do not require a todo list — r
 **When GitHub is NOT connected:**
 If the user asks to clone, inspect, or work on a specific repository by name, do NOT just tell them to connect GitHub. Instead:
 1. Acknowledge GitHub is not connected so you cannot access their private repos or make commits.
-2. Immediately use \`call_librarian\` to search the web for that repository (e.g. "Find the GitHub URL, README, and codebase structure for <repo name>") and return everything you find — file structure, key files, purpose, tech stack, open issues, recent commits, etc.
+2. Immediately use \`call_librarian_pro\` to search the web for that repository (e.g. "Find the GitHub URL, README, and codebase structure for <repo name>") and return everything you find — file structure, key files, purpose, tech stack, open issues, recent commits, etc.
 3. Offer concrete help based on what the librarian found: architecture review, code explanation, suggested improvements, or a plan for when they do connect GitHub.
 
 For all other requests (no specific repo target), tell the user to connect their GitHub account using the button above. You can still assist with architecture, code review of pasted code, and planning.
@@ -228,32 +226,24 @@ For all other requests (no specific repo target), tell the user to connect their
 \`github_list_repositories\` only returns up to 100 repos sorted by recent activity — the target repo may exist but simply not appear in that list. Before concluding a repo is absent:
 1. Call \`github_get_repository\` directly with the exact \`owner/repo\` the user mentioned. This is a direct API lookup that succeeds regardless of pagination. If the user did not provide an owner, use the login returned by \`github_get_viewer\` as the owner.
 2. Only if \`github_get_repository\` returns a "Not Found" error, try \`github_search_code\` with the repo name to check if it exists under a different owner.
-3. Only if both steps confirm the repository truly does not exist in the connected account (wrong name, wrong owner, or it is a public third-party repo), fall back to \`call_librarian\` to search the web for that repository by name and return what you find — README, file structure, tech stack, open issues, official docs, etc.
+3. Only if both steps confirm the repository truly does not exist in the connected account (wrong name, wrong owner, or it is a public third-party repo), fall back to \`call_librarian_pro\` to search the web for that repository by name and return what you find — README, file structure, tech stack, open issues, official docs, etc.
 4. Continue helping with whatever the user's underlying goal was, using the web-sourced information as your context.
 
 ---
 
-### \`call_librarian\` — documentation & deep research
+### \`call_librarian_pro\` — documentation research & live browser automation
 
-**Use for:** library APIs and usage, package versions, changelogs, migration guides, framework patterns, reference implementations from popular repos, any unfamiliar external dependency.
+**Use for:** ALL external research and web interaction needs. This single subagent handles both static documentation research and live browser automation — replacing the old separate librarian and browser_use tools.
 
-**Use BEFORE writing code**, not after hitting an error.
+**Static research mode (faster):** library APIs, package versions, changelogs, migration guides, framework patterns, reference implementations, any unfamiliar external dependency. Use BEFORE writing code.
 
-**Do NOT use for:** information you can determine by reading the repository itself. Use GitHub search/read for that.
+**Live browser mode (when static fails):** verifying a deployed site, filling web forms, extracting data from JS-rendered SPAs, taking screenshots of live UIs, login-required pages, multi-step web workflows.
 
-**Example:** \`call_librarian({ request: "What is the correct API for drizzle-orm programmatic migrations in a Next.js 15 server component?" })\`
+**Do NOT use for:** information you can read directly from the repository. Use GitHub search/read for that.
 
----
-
-### \`call_browser_use\` — live browser automation
-
-**Use for:** verifying a deployed site works end-to-end, filling web forms, extracting data from JS-rendered SPAs, taking screenshots of live UIs, automating multi-step web workflows.
-
-**Do NOT use for:** documentation research (use librarian), anything accessible via the GitHub API.
-
-**How it works:** The expert runs a persistent cloud browser via Playwright over CDP (no vision model needed — pages are read as accessibility trees with interactive element ref IDs like @e1, @e2). It can navigate, click, type, scroll, press keys, select dropdowns, and take screenshots all within the same stateful session — enabling login flows, multi-step forms, and SPA navigation.
-
-**Example:** \`call_browser_use({ task: "Go to https://example.com/login, fill the email field with test@test.com and the password field with pass123, submit the form, then return what page appears and take a screenshot." })\`
+**Examples:**
+- Research: \`call_librarian_pro({ request: "What is the correct API for drizzle-orm programmatic migrations in a Next.js 15 server component?" })\`
+- Browser: \`call_librarian_pro({ request: "Go to https://example.com/login, fill email with test@test.com and password with pass123, submit the form, then return what page appears and take a screenshot." })\`
 
 ---
 
@@ -263,7 +253,7 @@ For all other requests (no specific repo target), tell the user to connect their
 
 **Required for max-accuracy tasks:** Use Oracle before major implementation when the task involves auth, payments, security, migrations, data-loss risk, deployment failures, cross-file architecture, vague high-level goals, or repeated failures. Use the report as a planning and review aid, then continue autonomously.
 
-**Do NOT use for:** live/current external facts, package API verification, or browser state. Use \`call_librarian\` for evidence and \`call_browser_use\` for live browser work.
+**Do NOT use for:** live/current external facts, package API verification, or browser state. Use \`call_librarian_pro\` for evidence-gathering and live browser work.
 
 **Example:** \`call_oracle({ request: "Evaluate the safest architecture for adding multi-tenant billing to this app, including risks, schema changes, rollout plan, and edge cases." })\`
 
@@ -301,8 +291,8 @@ For all other requests (no specific repo target), tell the user to connect their
 ### Feature implementation from an issue
 1. \`github_get_issue\` + \`github_get_file_tree\` in parallel.
 2. \`github_read_file\` all relevant files in parallel.
-3. Call \`call_librarian\` for any uncertain library/API usage.
-4. \`github_create_branch\` → \`github_upsert_file\` (all changes) → sandbox verify → \`github_create_pull_request\` referencing the issue.
+3. Call \`call_librarian_pro\` for any uncertain library/API usage.
+4. \`github_create_branch\` → \`call_editor\` to apply all file changes locally → sandbox verify → \`github_create_pull_request\` referencing the issue.
 
 ### Bug fix
 1. \`github_search_code\` to locate the bug. \`github_read_file\` the relevant file(s) in parallel.
@@ -315,7 +305,7 @@ For all other requests (no specific repo target), tell the user to connect their
 
 ### CVE & dependency remediation
 1. \`github_read_file\` all dependency manifests (package.json, requirements.txt, go.mod, Cargo.toml) in parallel.
-2. Identify vulnerable version ranges. Call \`call_librarian\` to confirm safe replacement versions if uncertain.
+2. Identify vulnerable version ranges. Call \`call_librarian_pro\` to confirm safe replacement versions if uncertain.
 3. Patch version pins. Open PR with CVE references in the body.
 
 ### Weekly digest
@@ -354,7 +344,7 @@ For all other requests (no specific repo target), tell the user to connect their
 
 Before producing your final response or opening a PR, do a fast internal audit:
 1. **Evidence check**: Can every technical claim (file path, API call, version, flag, env var) be traced to a specific tool result in this session? If not, use a tool to verify it now.
-2. **Assumption check**: Did you write any code against an external library without calling \`call_librarian\` first? If yes, call it now and adjust if needed.
+2. **Assumption check**: Did you write any code against an external library without calling \`call_librarian_pro\` first? If yes, call it now and adjust if needed.
 3. **Verification check**: Did you run the relevant tests or build in a Daytona sandbox? If not, and the repo has tests, do it now.
 
 Only after passing this audit should you write the final summary and close the task.
@@ -544,16 +534,10 @@ function toolLabel(name: string, args: Record<string, unknown> = {}): string {
       return url ? `Cloning ${trim(shortUrl, 40)} into sandbox` : 'Cloning repo into sandbox';
     }
 
-    // ── Librarian ─────────────────────────────────────────────────────────
-    case 'call_librarian': {
+    // ── Librarian Pro ─────────────────────────────────────────────────────
+    case 'call_librarian_pro': {
       const req = s('request');
-      return req ? `Librarian: ${trim(req, 55)}` : 'Consulting librarian';
-    }
-
-    // ── Browser Use Expert ────────────────────────────────────────────────
-    case 'call_browser_use': {
-      const task = s('task');
-      return task ? `Browser: ${trim(task, 52)}` : 'Using browser';
+      return req ? `Librarian Pro: ${trim(req, 48)}` : 'Researching';
     }
 
     case 'call_oracle': {
@@ -1051,7 +1035,7 @@ export async function POST(req: NextRequest) {
         let noGhAssistantMsgId = assistantMessageId ?? crypto.randomUUID();
         let noGhAssistantText = '';
         const noGhRecentSigs: string[] = [];
-        const noGhTools = [...daytonaToolDefinitions, callLibrarianToolDefinition, callBrowserUseToolDefinition, callOracleToolDefinition, callEditorToolDefinition];
+        const noGhTools = [...daytonaToolDefinitions, callLibrarianProToolDefinition, callOracleToolDefinition, callEditorToolDefinition];
 
         for (;;) {
           let iterText = '';
@@ -1123,34 +1107,20 @@ export async function POST(req: NextRequest) {
             if (jobId) await persistJobEvent(jobId, 'tool_start', { tool: label });
             try {
               let result: unknown;
-              if (isCallLibrarianTool(toolName)) {
+              if (isCallLibrarianProTool(toolName)) {
                 const request = typeof toolArgs.request === 'string' ? toolArgs.request : JSON.stringify(toolArgs);
-                result = await runLibrarianSubagent(request, (event, stepLabel, error) => {
+                result = await runLibrarianProSubagent(request, (event, stepLabel, error) => {
                   if (event === 'start') {
-                    emit({ type: 'librarian_step_start', parentLabel: label, step: stepLabel });
-                    if (jobId) persistJobEvent(jobId, 'librarian_step_start', { parentLabel: label, step: stepLabel }).catch(() => {});
+                    emit({ type: 'librarian_pro_step_start', parentLabel: label, step: stepLabel });
+                    if (jobId) persistJobEvent(jobId, 'librarian_pro_step_start', { parentLabel: label, step: stepLabel }).catch(() => {});
                   } else {
-                    emit({ type: 'librarian_step_complete', parentLabel: label, step: stepLabel, error: error ?? false });
-                    if (jobId) persistJobEvent(jobId, 'librarian_step_complete', { parentLabel: label, step: stepLabel, error: error ?? false }).catch(() => {});
+                    emit({ type: 'librarian_pro_step_complete', parentLabel: label, step: stepLabel, error: error ?? false });
+                    if (jobId) persistJobEvent(jobId, 'librarian_pro_step_complete', { parentLabel: label, step: stepLabel, error: error ?? false }).catch(() => {});
                   }
                 });
                 const report = typeof result === 'string' ? result : JSON.stringify(result);
-                emit({ type: 'librarian_report', parentLabel: label, report });
-                if (jobId) persistJobEvent(jobId, 'librarian_report', { parentLabel: label, report }).catch(() => {});
-              } else if (isCallBrowserUseTool(toolName)) {
-                const task = typeof toolArgs.task === 'string' ? toolArgs.task : JSON.stringify(toolArgs);
-                result = await runBrowserUseSubagent(task, (event, stepLabel, error) => {
-                  if (event === 'start') {
-                    emit({ type: 'browser_use_step_start', parentLabel: label, step: stepLabel });
-                    if (jobId) persistJobEvent(jobId, 'browser_use_step_start', { parentLabel: label, step: stepLabel }).catch(() => {});
-                  } else {
-                    emit({ type: 'browser_use_step_complete', parentLabel: label, step: stepLabel, error: error ?? false });
-                    if (jobId) persistJobEvent(jobId, 'browser_use_step_complete', { parentLabel: label, step: stepLabel, error: error ?? false }).catch(() => {});
-                  }
-                });
-                const report = typeof result === 'string' ? result : JSON.stringify(result);
-                emit({ type: 'browser_use_report', parentLabel: label, report });
-                if (jobId) persistJobEvent(jobId, 'browser_use_report', { parentLabel: label, report }).catch(() => {});
+                emit({ type: 'librarian_pro_report', parentLabel: label, report });
+                if (jobId) persistJobEvent(jobId, 'librarian_pro_report', { parentLabel: label, report }).catch(() => {});
               } else if (isCallOracleTool(toolName)) {
                 const request = typeof toolArgs.request === 'string' ? toolArgs.request : JSON.stringify(toolArgs);
                 result = await runOracleSubagent(request, (event, stepLabel, error) => {
@@ -1277,7 +1247,7 @@ export async function POST(req: NextRequest) {
         const { content, toolCalls, finishReason } = await streamChargedFireworksCall(
           {
             messages: conversation,
-            tools: [...githubToolDefinitions, ...daytonaToolDefinitions, callLibrarianToolDefinition, callBrowserUseToolDefinition, callOracleToolDefinition, callEditorToolDefinition, ...ULTRAWORK_TOOLS],
+            tools: [...githubToolDefinitions.filter(t => !['github_upsert_file', 'github_delete_file'].includes(t.function.name)), ...daytonaToolDefinitions, callLibrarianProToolDefinition, callOracleToolDefinition, callEditorToolDefinition, ...ULTRAWORK_TOOLS],
             tool_choice: 'auto',
             max_tokens: agentMaxTokens,
             temperature: agentTemperature,
@@ -1456,36 +1426,21 @@ export async function POST(req: NextRequest) {
             if (jobId) await persistJobEvent(jobId, 'tool_start', { tool: label });
             try {
               let result: unknown;
-              if (isCallLibrarianTool(toolName)) {
+              if (isCallLibrarianProTool(toolName)) {
                 const request = typeof toolArgs.request === 'string' ? toolArgs.request : JSON.stringify(toolArgs);
                 const parentLabel = label;
-                result = await runLibrarianSubagent(request, (event, stepLabel, error) => {
+                result = await runLibrarianProSubagent(request, (event, stepLabel, error) => {
                   if (event === 'start') {
-                    emit({ type: 'librarian_step_start', parentLabel, step: stepLabel });
-                    if (jobId) persistJobEvent(jobId, 'librarian_step_start', { parentLabel, step: stepLabel }).catch(() => {});
+                    emit({ type: 'librarian_pro_step_start', parentLabel, step: stepLabel });
+                    if (jobId) persistJobEvent(jobId, 'librarian_pro_step_start', { parentLabel, step: stepLabel }).catch(() => {});
                   } else {
-                    emit({ type: 'librarian_step_complete', parentLabel, step: stepLabel, error: error ?? false });
-                    if (jobId) persistJobEvent(jobId, 'librarian_step_complete', { parentLabel, step: stepLabel, error: error ?? false }).catch(() => {});
+                    emit({ type: 'librarian_pro_step_complete', parentLabel, step: stepLabel, error: error ?? false });
+                    if (jobId) persistJobEvent(jobId, 'librarian_pro_step_complete', { parentLabel, step: stepLabel, error: error ?? false }).catch(() => {});
                   }
                 });
                 const report = typeof result === 'string' ? result : JSON.stringify(result);
-                emit({ type: 'librarian_report', parentLabel, report });
-                if (jobId) persistJobEvent(jobId, 'librarian_report', { parentLabel, report }).catch(() => {});
-              } else if (isCallBrowserUseTool(toolName)) {
-                const task = typeof toolArgs.task === 'string' ? toolArgs.task : JSON.stringify(toolArgs);
-                const parentLabel = label;
-                result = await runBrowserUseSubagent(task, (event, stepLabel, error) => {
-                  if (event === 'start') {
-                    emit({ type: 'browser_use_step_start', parentLabel, step: stepLabel });
-                    if (jobId) persistJobEvent(jobId, 'browser_use_step_start', { parentLabel, step: stepLabel }).catch(() => {});
-                  } else {
-                    emit({ type: 'browser_use_step_complete', parentLabel, step: stepLabel, error: error ?? false });
-                    if (jobId) persistJobEvent(jobId, 'browser_use_step_complete', { parentLabel, step: stepLabel, error: error ?? false }).catch(() => {});
-                  }
-                });
-                const report = typeof result === 'string' ? result : JSON.stringify(result);
-                emit({ type: 'browser_use_report', parentLabel, report });
-                if (jobId) persistJobEvent(jobId, 'browser_use_report', { parentLabel, report }).catch(() => {});
+                emit({ type: 'librarian_pro_report', parentLabel, report });
+                if (jobId) persistJobEvent(jobId, 'librarian_pro_report', { parentLabel, report }).catch(() => {});
               } else if (isCallOracleTool(toolName)) {
                 const request = typeof toolArgs.request === 'string' ? toolArgs.request : JSON.stringify(toolArgs);
                 const parentLabel = label;
