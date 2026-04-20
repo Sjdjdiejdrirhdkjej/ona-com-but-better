@@ -630,7 +630,12 @@ async function callFireworks(body: Record<string, unknown>, modelOverride?: stri
     throw new Error('FIREWORKS_API_KEY is not configured. Please add it in environment secrets.');
   }
 
-  const modelsToTry = modelOverride ? [modelOverride] : FALLBACK_MODELS;
+  // When a specific model is requested, try it first, then fall back to the
+  // standard fallback list if it is unavailable (e.g. not deployed as
+  // serverless on this Fireworks account).
+  const modelsToTry = modelOverride
+    ? [modelOverride, ...FALLBACK_MODELS.filter(m => m !== modelOverride)]
+    : FALLBACK_MODELS;
   let lastError: Error | null = null;
 
   for (const model of modelsToTry) {
@@ -657,6 +662,19 @@ async function callFireworks(body: Record<string, unknown>, modelOverride?: stri
 
     if (res.status === 429 || res.status >= 500) {
       lastError = new Error(`The AI model is temporarily busy (${res.status}). Please try again in a moment.`);
+      continue;
+    }
+
+    // 404 / 403 mean the model is not deployed or accessible on this account.
+    // Fall through to the next model in the list rather than crashing.
+    if (res.status === 404 || res.status === 403) {
+      const text = await res.text();
+      let message = text;
+      try {
+        const json = JSON.parse(text) as { error?: { message?: string } };
+        if (json.error?.message) message = json.error.message;
+      } catch {}
+      lastError = new Error(`Model ${model} is not available on this account (${res.status}): ${message}`);
       continue;
     }
 
