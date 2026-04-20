@@ -3,7 +3,10 @@ import { execFile } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { eq } from 'drizzle-orm';
+import { db } from '@/libs/DB';
 import { createFileDiff } from '@/libs/FileDiff';
+import { userGithubTokensSchema } from '@/models/Schema';
 
 const execFileAsync = promisify(execFile);
 const GITHUB_API = 'https://api.github.com';
@@ -20,7 +23,18 @@ export function isGitHubConfigured() {
   return Boolean(process.env.GITHUB_CLIENT_ID);
 }
 
-export async function getGitHubToken(): Promise<string | undefined> {
+export async function getGitHubToken(userId?: string): Promise<string | undefined> {
+  if (userId) {
+    try {
+      const [stored] = await db
+        .select({ githubToken: userGithubTokensSchema.githubToken })
+        .from(userGithubTokensSchema)
+        .where(eq(userGithubTokensSchema.userId, userId))
+        .limit(1);
+      if (stored?.githubToken) return stored.githubToken;
+    } catch {}
+  }
+
   try {
     const cookieStore = await cookies();
     return cookieStore.get('github_token')?.value ?? undefined;

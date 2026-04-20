@@ -1,4 +1,7 @@
 import { cookies } from 'next/headers';
+import { db } from '@/libs/DB';
+import { getSession } from '@/libs/ReplitAuth';
+import { userGithubTokensSchema } from '@/models/Schema';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +41,25 @@ export async function POST(req: Request) {
       maxAge: 60 * 60 * 24 * 90,
       path: '/',
     });
+
+    const session = await getSession();
+    if (session.user?.id) {
+      await db
+        .insert(userGithubTokensSchema)
+        .values({
+          userId: session.user.id,
+          githubToken: data.access_token,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: userGithubTokensSchema.userId,
+          set: {
+            githubToken: data.access_token,
+            updatedAt: new Date(),
+          },
+        });
+    }
+
     return Response.json({ status: 'authorized' });
   }
 
