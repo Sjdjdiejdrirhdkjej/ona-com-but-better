@@ -1,64 +1,29 @@
-'use client';
+import { redirect } from 'next/navigation';
+import { getUser } from '@/libs/auth';
+import { DarkModeToggle, SignOutButton } from './SettingsActions';
 
-import { useEffect, useState } from 'react';
-import { signOut } from '@/libs/auth-client';
-import type { SessionUser } from '@/libs/auth-client';
-
-function getInitials(user: SessionUser): string {
-  const f = (user.firstName ?? '').trim();
-  const l = (user.lastName ?? '').trim();
+function getInitials(firstName: string | null, lastName: string | null, email: string | null): string {
+  const f = (firstName ?? '').trim();
+  const l = (lastName ?? '').trim();
   if (f || l) return `${f.charAt(0)}${l.charAt(0)}`.toUpperCase().replace(/\s/g, '') || '?';
-  const e = (user.email ?? '').trim();
+  const e = (email ?? '').trim();
   return e ? e.charAt(0).toUpperCase() : '?';
 }
 
-function getDisplayName(user: SessionUser): string {
-  const full = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
-  return full || user.email || 'Account';
+function getDisplayName(firstName: string | null, lastName: string | null, email: string | null): string {
+  const full = [firstName, lastName].filter(Boolean).join(' ').trim();
+  return full || email || 'Account';
 }
 
-export default function UserProfilePage() {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    setDark(document.documentElement.classList.contains('dark'));
-    fetch('/api/auth/user')
-      .then(res => (res.ok ? res.json() : null))
-      .then((data: SessionUser | null) => setUser(data))
-      .catch(() => setUser(null))
-      .finally(() => setIsLoading(false));
-  }, []);
-
-  function toggleTheme() {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle('dark', next);
-    try { localStorage.setItem('theme', next ? 'dark' : 'light'); } catch {}
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="size-6 rounded-full border-2 border-gray-300 border-t-gray-700 dark:border-gray-700 dark:border-t-gray-300 animate-spin" />
-      </div>
-    );
-  }
+export default async function UserProfilePage() {
+  const user = await getUser();
 
   if (!user) {
-    return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center px-4">
-        <p className="text-gray-600 dark:text-gray-400">You are not signed in.</p>
-        <a href="/sign-in" className="rounded-lg bg-gray-900 dark:bg-gray-100 px-4 py-2 text-sm font-medium text-white dark:text-gray-900 transition-opacity hover:opacity-80">
-          Sign in
-        </a>
-      </div>
-    );
+    redirect('/sign-in?returnTo=/dashboard/user-profile');
   }
 
-  const initials = getInitials(user);
-  const displayName = getDisplayName(user);
+  const initials = getInitials(user.firstName, user.lastName, user.email);
+  const displayName = getDisplayName(user.firstName, user.lastName, user.email);
 
   return (
     <div className="mx-auto max-w-xl px-4 py-10">
@@ -100,27 +65,7 @@ export default function UserProfilePage() {
           style={{ backgroundColor: 'var(--bg-card)' }}
         >
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Appearance</h2>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Dark mode</p>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Switch between light and dark theme</p>
-            </div>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-pressed={dark}
-              aria-label="Toggle dark mode"
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 focus:ring-offset-2 ${
-                dark ? 'bg-gray-900 dark:bg-gray-100' : 'bg-gray-200 dark:bg-gray-700'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block size-5 rounded-full bg-white dark:bg-gray-900 shadow ring-0 transition-transform duration-200 ease-in-out ${
-                  dark ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
+          <DarkModeToggle />
         </section>
 
         <section
@@ -128,18 +73,7 @@ export default function UserProfilePage() {
           style={{ backgroundColor: 'var(--bg-card)' }}
         >
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">Account</h2>
-          <button
-            type="button"
-            onClick={() => signOut()}
-            className="flex w-full items-center gap-2 rounded-xl border border-black/8 dark:border-white/10 px-4 py-3 text-sm text-red-600 dark:text-red-400 transition-colors hover:bg-red-50 dark:hover:bg-red-500/10"
-            style={{ backgroundColor: 'var(--bg)' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M6 2H3a1 1 0 00-1 1v8a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M9 4.5L11.5 7 9 9.5M11.5 7H6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Sign out
-          </button>
+          <SignOutButton />
         </section>
       </div>
     </div>
