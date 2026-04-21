@@ -73,6 +73,124 @@ export function SignOutButton() {
   );
 }
 
+export function CreditsTopup() {
+  const [credits, setCredits] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [toppingUp, setToppingUp] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [addedAmount, setAddedAmount] = useState<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch('/api/credits/balance')
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: { credits?: number } | null) => {
+        if (cancelled) return;
+        if (data && typeof data.credits === 'number') {
+          setCredits(data.credits);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    function handleUpdate(event: Event) {
+      const detail = (event as CustomEvent<{ credits: number }>).detail;
+      if (detail && typeof detail.credits === 'number') {
+        setCredits(detail.credits);
+      }
+    }
+
+    window.addEventListener('credits-updated', handleUpdate);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('credits-updated', handleUpdate);
+    };
+  }, []);
+
+  async function handleTopup() {
+    setToppingUp(true);
+    setError(null);
+    setSuccess(false);
+    try {
+      const response = await fetch('/api/credits/topup', { method: 'POST' });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error ?? 'Could not top up credits.');
+      }
+      const data = await response.json() as { credits: number; added: number };
+      setCredits(data.credits);
+      setAddedAmount(data.added);
+      setSuccess(true);
+      // Dispatch event so CreditsChip in the header updates too
+      window.dispatchEvent(new CustomEvent('credits-updated', { detail: { credits: data.credits } }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not top up credits.');
+    } finally {
+      setToppingUp(false);
+    }
+  }
+
+  const depleted = credits !== null && credits <= 0;
+  const formattedBalance = credits !== null ? new Intl.NumberFormat().format(credits) : '—';
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Credit balance</p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Credits power your AI conversations. Top up to keep the agent running.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div
+          className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 ${
+            depleted
+              ? 'border-red-400/40 bg-red-500/10'
+              : 'border-black/8 dark:border-white/10'
+          }`}
+          style={{ backgroundColor: depleted ? undefined : 'var(--bg)' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" className={depleted ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'}>
+            <path d="M13 2 L3 14 H12 L11 22 L21 10 H12 L13 2 Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="currentColor" fillOpacity="0.18" />
+          </svg>
+          <span className={`text-lg font-semibold tabular-nums ${
+            depleted
+              ? 'text-red-700 dark:text-red-300'
+              : 'text-gray-900 dark:text-gray-100'
+          }`}>
+            {loading ? '…' : formattedBalance}
+          </span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">credits</span>
+        </div>
+      </div>
+
+      {success && (
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-50 p-3 dark:bg-emerald-500/10">
+          <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">
+            {new Intl.NumberFormat().format(addedAmount)} credits added successfully!
+          </p>
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+
+      <button
+        type="button"
+        onClick={handleTopup}
+        disabled={toppingUp}
+        className="min-h-10 w-full rounded-xl bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300"
+      >
+        {toppingUp ? 'Adding credits…' : 'Top up 1,000 credits'}
+      </button>
+    </div>
+  );
+}
+
 export function ApiKeysPanel() {
   const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
   const [newKey, setNewKey] = useState<string | null>(null);

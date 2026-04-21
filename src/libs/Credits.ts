@@ -135,6 +135,43 @@ export async function deductCredits(userId: string, amount: number): Promise<num
 }
 
 /**
+ * Atomically adds `amount` credits to the user's balance. Creates the
+ * row if it does not yet exist (credits start at 0 before the top-up amount
+ * is applied).
+ *
+ * Returns the new balance, or `null` if the top-up could not be persisted.
+ */
+export async function topupUserCredits(userId: string, amount: number): Promise<number | null> {
+  if (!userId || amount <= 0) {
+    return null;
+  }
+  try {
+    const now = new Date();
+    const [row] = await db
+      .insert(userCreditsSchema)
+      .values({
+        userId,
+        credits: amount,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: userCreditsSchema.userId,
+        set: {
+          credits: sql`${userCreditsSchema.credits} + ${amount}`,
+          updatedAt: now,
+        },
+      })
+      .returning({ credits: userCreditsSchema.credits });
+
+    return row?.credits ?? null;
+  } catch (err) {
+    logger.warn({ err, userId, amount }, 'topupUserCredits: failed to persist top-up');
+    return null;
+  }
+}
+
+/**
  * Convenience wrapper: compute cost from a provider usage object, deduct it,
  * and return `{ cost, balance }`. Meant to be invoked from the top-level
  * chat route after each provider call, so session-authed UI callers and
