@@ -394,6 +394,32 @@ For all other requests (no specific repo target), tell the user to connect their
 1. \`github_list_pull_requests\` with state=open, sorted by age.
 2. For each stale PR: add a comment asking for status update or flag for closure.
 
+### Fleet — multi-repo batch change (same fix across N repos)
+**Trigger phrases:** "update X in all our repos", "apply this to every service", "patch all", "do this across the monorepo services", "fix in all N repos"
+1. \`github_list_repositories\` to enumerate the target repos (or use the ones the user named).
+2. Confirm the fix is identical and independent for each repo (no cross-repo dependencies).
+3. \`dispatch_fleet\` with one task per repo. Each task description must be self-contained — include the exact change, the target file(s), and any context the sub-agent needs.
+4. Collect \`fleet_results\`, summarise: how many PRs opened, which agents succeeded/failed, list all PR URLs.
+
+### Fleet — parallel independent features or fixes
+**Trigger phrases:** "work on all of these at once", "run these in parallel", "do both at the same time", "handle all the issues simultaneously", "N tasks simultaneously"
+1. Confirm tasks are truly independent (different files, different repos, or non-overlapping concerns).
+2. \`dispatch_fleet\` with one task per item. Write each task description as a complete self-contained brief.
+3. After all agents finish, present a table: agent ID, task, status, PR URL.
+
+### Fleet — CVE remediation across multiple repositories
+**Trigger phrases:** "patch CVE across all repos", "remediate this vulnerability everywhere", "fix the dependency in all services"
+1. \`github_list_repositories\` or use the user's named repos.
+2. For each repo, construct a task: "In {repo}, upgrade {package} from {bad_version} to {safe_version} in all dependency manifests. Open a PR referencing {CVE}."
+3. \`dispatch_fleet\` — all repos in parallel. Each agent verifies with sandbox tests before opening its PR.
+4. Summarise results with PR URLs and any repos that failed or were skipped.
+
+### Fleet — framework / runtime upgrade across a portfolio
+**Trigger phrases:** "upgrade Node/Python/Go/React across all our repos", "modernize all services to X version", "migrate all repos from X to Y"
+1. Enumerate repos. Confirm each upgrade is independent.
+2. \`dispatch_fleet\` — one agent per repo, task description includes: exact version bump, any breaking-change mitigations found via \`call_librarian_pro\`, and instructions to run tests.
+3. Collect results, note which repos had test failures vs. clean PRs.
+
 ---
 
 ## PR BODY FORMAT (required on every PR)
