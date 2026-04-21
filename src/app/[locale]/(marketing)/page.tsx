@@ -166,7 +166,7 @@ export default async function Index(props: IIndexProps) {
       <section className="mx-auto grid min-h-[calc(100svh-3.5rem)] max-w-7xl grid-cols-1 border-x border-black/8 px-4 pb-12 pt-14 dark:border-white/10 sm:px-8 md:grid-cols-12 md:items-center md:gap-8 md:pt-10">
         <div className="md:col-span-9 md:col-start-3 lg:col-span-8 lg:col-start-4">
           <h1
-            className="max-w-5xl text-[clamp(2.25rem,8vw,7rem)] leading-[0.92] tracking-[-0.07em] text-neutral-950 dark:text-neutral-50 sm:leading-[0.9] sm:tracking-[-0.075em]"
+            className="max-w-5xl text-[clamp(2.75rem,12vw,8rem)] leading-[0.92] tracking-[-0.07em] text-neutral-950 dark:text-neutral-50 sm:leading-[0.9] sm:tracking-[-0.075em]"
             style={{ fontFamily: SERIF, fontWeight: 400 }}
           >
             <span className="block italic tracking-[-0.085em]">The platform for</span>
@@ -436,7 +436,7 @@ export default async function Index(props: IIndexProps) {
       </section>
 
       <section className="mx-auto max-w-7xl border-x border-t border-black/8 px-4 py-14 text-center dark:border-white/10 sm:px-8 sm:py-20">
-        <h2 className="mx-auto max-w-4xl text-[clamp(2.25rem,8vw,6.5rem)] leading-[0.92] tracking-[-0.075em] text-neutral-950 dark:text-neutral-50 sm:leading-[0.88] sm:tracking-[-0.08em]" style={{ fontFamily: SERIF, fontWeight: 400 }}>
+        <h2 className="mx-auto max-w-4xl text-[clamp(2.5rem,11vw,7.5rem)] leading-[0.92] tracking-[-0.075em] text-neutral-950 dark:text-neutral-50 sm:leading-[0.88] sm:tracking-[-0.08em]" style={{ fontFamily: SERIF, fontWeight: 400 }}>
           Start shipping with ONA but OPEN SOURCE
         </h2>
         <p className="mx-auto mt-8 max-w-md text-lg text-neutral-700 dark:text-neutral-300">No commitment. No setup. Just start.</p>
