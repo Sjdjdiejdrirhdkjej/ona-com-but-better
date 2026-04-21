@@ -1326,6 +1326,44 @@ export default function AppPage() {
     }
   }, [conversations, initialSandboxGate, loading]);
 
+  // Watchdog: if `loading` is true but the active conversation has no
+  // active job and no SSE in flight, the request silently died (network
+  // blip, server restart, dropped connection). Reset loading after a short
+  // grace period so the send button doesn't stay disabled until refresh.
+  useEffect(() => {
+    if (!loading || !activeId) return;
+    const conv = conversations.find(c => c.id === activeId);
+    if (conv?.activeJobId) return;
+    if (activeSseFetchRef.current.has(activeId)) return;
+    if (bgPollTimersRef.current.has(activeId)) return;
+    const t = setTimeout(() => {
+      const stillNoJob = !conversations.find(c => c.id === activeId)?.activeJobId
+        && !activeSseFetchRef.current.has(activeId)
+        && !bgPollTimersRef.current.has(activeId);
+      if (stillNoJob) {
+        setLoading(false);
+        setSandboxBooting(false);
+        setInitialSandboxGate(waiting => waiting?.conversationId === activeId ? null : waiting);
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [loading, activeId, conversations]);
+
+  // When the user switches conversations, reset loading if the newly
+  // active conversation has no work in flight. (Loading is global; this
+  // prevents a stuck state from one conversation blocking sends in another.)
+  useEffect(() => {
+    if (!activeId) return;
+    const conv = conversations.find(c => c.id === activeId);
+    const hasWork = !!conv?.activeJobId
+      || activeSseFetchRef.current.has(activeId)
+      || bgPollTimersRef.current.has(activeId);
+    if (!hasWork && loading) {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
+
   useEffect(() => {
     if (!activeId) return;
     const url = new URL(window.location.href);
@@ -1519,12 +1557,19 @@ export default function AppPage() {
       userMsg,
     ];
 
+    // Generate the job ID client-side so we can start polling immediately,
+    // before the SSE stream delivers the first event. Set it synchronously
+    // alongside setLoading(true) so the watchdog effect never sees a window
+    // where loading is true but there is no activeJobId.
+    const pregenJobId = createBrowserId();
+
     setConversations(prev => prev.map(c =>
       c.id === activeId
         ? {
             ...c,
             messages: [...c.messages, userMsg, { id: assistantId, role: 'assistant' as const, content: '' }],
             title: isFirstMessage ? title : c.title,
+            activeJobId: pregenJobId,
           }
         : c,
     ));
@@ -1568,7 +1613,6 @@ export default function AppPage() {
     // Generate the job ID client-side so we can start polling immediately,
     // before the SSE stream delivers the first event. The server will use
     // this ID so polling and SSE refer to the same job.
-    const pregenJobId = createBrowserId();
     let currentJobId: string = pregenJobId;
     let streamFinished = false;
     let keepBackgroundJob = false;
@@ -1589,10 +1633,7 @@ export default function AppPage() {
       }));
     }
 
-    // Register the job ID in the conversation so the header/badge shows "working"
-    setConversations(prev => prev.map(c =>
-      c.id === convId ? { ...c, activeJobId: pregenJobId } : c,
-    ));
+    // (activeJobId was already set synchronously above, alongside setLoading(true))
 
     // Start polling immediately — this is the primary update path when the
     // Replit proxy buffers the SSE stream. Polling will show progress every
