@@ -24,24 +24,28 @@ const featureCards = [
     title: 'Task in, pull request out.',
     body: 'ONA executes end-to-end in the background. Keep momentum from any device.',
     cta: 'See how agents work',
+    href: '/learn/agents',
   },
   {
     tag: 'Automations',
     title: 'Agent fleets at scale.',
     body: 'Trigger repeatable workflows from pull requests, schedules, webhooks, or backlog systems, then review the PRs when they are ready.',
     cta: 'Explore automations',
+    href: '/learn/automations',
   },
   {
     tag: 'Connected environments',
     title: 'More than a sandbox.',
     body: 'Each agent gets a full cloud environment with your tools, network access, and permissions.',
     cta: 'Explore environments',
+    href: '/learn/environments',
   },
   {
     tag: 'Governance with guarantees',
     title: 'Runs in your VPC.',
     body: 'Complete network control with audit trails, scoped credentials, command policies, and explicit least-privilege access.',
     cta: 'Learn about governance',
+    href: '/learn/governance',
   },
 ];
 
@@ -93,26 +97,31 @@ const useCases = [
     title: 'Code migration & modernization',
     body: 'Migrate hundreds of repos in parallel — COBOL, Java & framework upgrades, CI pipelines. ONA does the work. You review the PRs.',
     cta: 'Learn more about code migration',
+    href: '/learn/code-migration',
   },
   {
     title: 'AI code review',
-    body: "ONA doesn't just scan patterns — it compiles, runs tests, and reviews in a real environment.",
+    body: "ONA doesn\u0027t just scan patterns — it compiles, runs tests, and reviews in a real environment.",
     cta: 'Learn more about code review',
+    href: '/learn/code-review',
   },
   {
     title: 'Automated CVE remediation',
     body: 'Remediates what your scanner finds — across hundreds of repos, in isolated environments. Tested, with PRs ready for review.',
     cta: 'Learn more about CVE remediation',
+    href: '/learn/cve-remediation',
   },
   {
     title: 'Backlog and bug triage',
     body: 'Pick up well-scoped backlog tickets, triage Sentry-style issues, reproduce failures, ship fixes, and leave a linked report.',
     cta: 'Learn more about backlog automation',
+    href: '/learn/backlog-automation',
   },
   {
     title: 'Docs drift and dead-code cleanup',
     body: 'Run deterministic scripts with AI judgment to update docs, remove unused code, and keep repositories ready for other agents.',
     cta: 'Learn more about maintenance agents',
+    href: '/learn/maintenance-agents',
   },
 ];
 
@@ -173,7 +182,8 @@ const blogPosts = [
     date: 'March 3, 2026',
     author: 'Leonardo Di Donato',
     title: 'How AI agents escape their own denylist and sandbox',
-    body: "The adversary can reason now, and our security tools weren't built for that.",
+    body: "The adversary can reason now, and our security tools weren\u0027t built for that.",
+    href: '/learn/agent-sandbox-escape',
   },
   {
     tag: 'AI',
@@ -181,13 +191,15 @@ const blogPosts = [
     author: 'Johannes Landgraf',
     title: 'ONA Automations: proactive background agents',
     body: 'Background agents that write, test, and ship code on a schedule.',
+    href: '/learn/ona-automations-launch',
   },
   {
     tag: 'AI',
     date: 'February 13, 2026',
     author: 'Johannes Landgraf',
     title: 'The last year of localhost',
-    body: "The companies winning with background agents didn't start with better models.",
+    body: "The companies winning with background agents didn\u0027t start with better models.",
+    href: '/learn/last-year-of-localhost',
   },
 ];
 
@@ -249,7 +261,7 @@ export default async function Index(props: IIndexProps) {
                 <span>→</span>
               </Link>
               <Link
-                href="/about/"
+                href="/demo"
                 className="inline-flex items-center gap-2 rounded-sm border px-5 py-2.5 text-sm font-medium text-neutral-700 dark:text-neutral-300 transition-colors hover:border-neutral-400 hover:text-neutral-950 dark:hover:border-neutral-500 dark:hover:text-neutral-50"
                 style={{ borderColor: "var(--cream-border)" }}
               >
@@ -366,7 +378,7 @@ export default async function Index(props: IIndexProps) {
                 </h3>
                 <p className="mt-5 max-w-md text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">{item.body}</p>
                 <div className="mt-8">
-                  <ArrowLink href="/about/">{item.cta}</ArrowLink>
+                  <ArrowLink href={item.href}>{item.cta}</ArrowLink>
                 </div>
               </div>
             ))}
@@ -550,7 +562,7 @@ export default async function Index(props: IIndexProps) {
                 </h3>
                 <p className="max-w-2xl text-base leading-relaxed text-neutral-600 dark:text-neutral-400 md:col-span-5">{item.body}</p>
                 <div className="md:col-span-3 md:text-right">
-                  <ArrowLink href="/about/">{item.cta}</ArrowLink>
+                  <ArrowLink href={item.href}>{item.cta}</ArrowLink>
                 </div>
               </div>
             ))}
@@ -570,7 +582,7 @@ export default async function Index(props: IIndexProps) {
                 "90–95% of migration work is done by ONA Automations. We just have to do the final push commands."
               </blockquote>
               <div className="mt-8">
-                <Link href="/about/" className="text-sm font-medium text-[#f0efd9] transition-opacity hover:opacity-60" style={{ fontFamily: MONO }}>
+                <Link href="/customer-stories" className="text-sm font-medium text-[#f0efd9] transition-opacity hover:opacity-60" style={{ fontFamily: MONO }}>
                   Read more customer stories →
                 </Link>
               </div>
@@ -650,7 +662,7 @@ export default async function Index(props: IIndexProps) {
             {blogPosts.map(post => (
               <Link
                 key={post.title}
-                href="/about/"
+                href={post.href}
                 className="flex min-h-80 flex-col justify-between border-b p-6 transition-colors last:border-b-0 sm:p-8 md:border-b-0 md:border-r md:last:border-r-0"
                 style={{ borderColor: "var(--cream-border)" }}
               >
@@ -691,7 +703,7 @@ export default async function Index(props: IIndexProps) {
               <span>→</span>
             </Link>
             <Link
-              href="/about/"
+              href="/demo"
               className="inline-flex justify-center rounded-sm border px-5 py-2.5 text-sm font-medium text-neutral-700 dark:text-neutral-300 transition-colors hover:border-neutral-400 hover:text-neutral-950 dark:hover:border-neutral-500 dark:hover:text-neutral-50"
               style={{ borderColor: "var(--cream-border)" }}
             >
