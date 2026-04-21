@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GitHubConnect } from '@/components/GitHubConnect';
@@ -770,16 +771,6 @@ export default function AppPage() {
   const [initialSandboxGate, setInitialSandboxGate] = useState<{ conversationId: string } | null>(null);
   const [sandboxToastId, setSandboxToastId] = useState<string | null>(null);
   const [taskListOpen, setTaskListOpen] = useState(false);
-  const [superAgentOpen, setSuperAgentOpen] = useState(false);
-  const [superAgentSaving, setSuperAgentSaving] = useState(false);
-  const [superAgentWaking, setSuperAgentWaking] = useState(false);
-  const [superAgentEnabled, setSuperAgentEnabled] = useState(false);
-  const [superAgentHeartbeat, setSuperAgentHeartbeat] = useState(String(DEFAULT_SUPER_AGENT_HEARTBEAT_MINUTES));
-  const [superAgentPrompt, setSuperAgentPrompt] = useState(DEFAULT_SUPER_AGENT_PROMPT);
-  const [superAgentModel, setSuperAgentModel] = useState(DEFAULT_SUPER_AGENT_MODEL);
-  const [superAgentError, setSuperAgentError] = useState<string | null>(null);
-  const [superAgentWakeSuccess, setSuperAgentWakeSuccess] = useState(false);
-  const [superAgentUrlCopied, setSuperAgentUrlCopied] = useState(false);
   const bgPollTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // Generation counter per conversation. Incremented by stopBackgroundPoll so
   // that any poll fetch already in-flight when polling is stopped can detect

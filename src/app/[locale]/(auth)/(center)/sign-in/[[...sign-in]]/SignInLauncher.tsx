@@ -23,7 +23,6 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
   const [status, setStatus] = useState<SignInStatus>('idle');
   const [attempts, setAttempts] = useState(0);
   const [handoffError, setHandoffError] = useState<string | null>(errorMessage || null);
-  const attemptsRef = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const handoffHref = href.includes('?') ? `${href}&handoff=1` : `${href}?handoff=1`;
 
@@ -60,11 +59,11 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
       setStatus(current => (current === 'checking' ? 'idle' : current));
       return;
     }
+    // Increment attempts and decide if we should time out
+    const nextAttempts = attempts + 1;
+    setAttempts(nextAttempts);
 
-    attemptsRef.current += 1;
-    setAttempts(attemptsRef.current);
-
-    if (attemptsRef.current >= MAX_SESSION_CHECKS) {
+    if (nextAttempts >= MAX_SESSION_CHECKS) {
       setStatus('timeout');
       return;
     }
@@ -72,14 +71,14 @@ export function SignInLauncher({ errorMessage, href, label, returnTo, showContin
     timeoutRef.current = window.setTimeout(() => {
       void checkSession(true);
     }, SESSION_CHECK_INTERVAL_MS);
-  }, [clearPendingCheck, returnTo]);
+  }, [clearPendingCheck, returnTo, attempts]);
 
   const startWaiting = useCallback(() => {
-    attemptsRef.current = 0;
     setAttempts(0);
     setStatus('waiting');
     void checkSession(true);
   }, [checkSession]);
+  
 
   function startAuth() {
     const authWindow = window.open('about:blank', 'ona-replit-auth', 'popup=yes,width=520,height=720');
