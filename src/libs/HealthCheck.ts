@@ -1,4 +1,4 @@
-import { db } from '@/libs/DB';
+import { getDb } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
 import { agentJobsSchema, conversationSuperAgentsSchema } from '@/models/Schema';
 import { eq, and, lte } from 'drizzle-orm';
@@ -35,6 +35,7 @@ const HEALTH_CHECK_TIMEOUT = 5000;
 async function checkDatabase(): Promise<{ status: HealthStatus; responseTime: number; message?: string }> {
   const start = Date.now();
   try {
+    const db = await getDb();
     await Promise.race([
       db.execute('SELECT 1'),
       new Promise((_, reject) => 
@@ -53,6 +54,7 @@ async function checkDatabase(): Promise<{ status: HealthStatus; responseTime: nu
 
 async function checkSuperAgent(): Promise<{ status: HealthStatus; activeJobs: number; dueHeartbeats: number; message?: string }> {
   try {
+    const db = await getDb();
     const now = new Date();
     const [activeJobsResult, dueHeartbeatsResult] = await Promise.all([
       db.select().from(agentJobsSchema).where(eq(agentJobsSchema.status, 'running')),
