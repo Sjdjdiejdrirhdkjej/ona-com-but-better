@@ -83,9 +83,8 @@ export function CreditsChip() {
           : 'border-black/10 bg-black/5 text-gray-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200',
       ].join(' ')}
     >
-      <svg width="11" height="11" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-        <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3" />
-        <path d="M7 4v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M13 2 L3 14 H12 L11 22 L21 10 H12 L13 2 Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="currentColor" fillOpacity="0.18" />
       </svg>
       <span className="tabular-nums">{label}</span>
     </span>
