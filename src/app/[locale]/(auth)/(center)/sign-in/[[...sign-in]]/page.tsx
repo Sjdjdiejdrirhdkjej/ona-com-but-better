@@ -36,7 +36,7 @@ export default async function SignInPage(props: ISignInPageProps) {
   const { locale } = await props.params;
   const searchParams = await props.searchParams;
   setRequestLocale(locale);
-  const defaultReturnTo = locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
+  const defaultReturnTo = locale === AppConfig.defaultLocale ? '/dashboard' : `/${locale}/dashboard`;
   const returnTo = getSafeReturnPath(searchParams.returnTo || defaultReturnTo, 'https://ona.local');
   const errorMessage = searchParams.error ? errorMessages[searchParams.error] || errorMessages.callback_failed : null;
   const retryHref = `/api/login?returnTo=${encodeURIComponent(returnTo)}`;

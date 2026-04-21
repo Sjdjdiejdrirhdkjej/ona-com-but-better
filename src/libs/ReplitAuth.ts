@@ -12,7 +12,7 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 
 const ISSUER_URL = new URL('https://replit.com/oidc');
-const DEFAULT_RETURN_TO = '/app';
+const DEFAULT_RETURN_TO = '/dashboard';
 
 export type SessionUser = {
   id: string;

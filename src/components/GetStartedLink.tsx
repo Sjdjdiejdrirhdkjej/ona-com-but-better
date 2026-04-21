@@ -11,7 +11,7 @@ type GetStartedLinkProps = {
 };
 
 function getReturnTo(locale: string) {
-  return locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
+  return locale === AppConfig.defaultLocale ? '/dashboard' : `/${locale}/dashboard`;
 }
 
 function getSignInPath(locale: string) {

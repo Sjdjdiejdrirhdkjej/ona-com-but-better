@@ -193,7 +193,7 @@ export default async function Index(props: IIndexProps) {
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
-                href="/app"
+                href="/dashboard"
                 className="inline-flex items-center gap-2 rounded-sm bg-neutral-950 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80"
               >
                 Get Started for Free
@@ -283,10 +283,10 @@ export default async function Index(props: IIndexProps) {
             </p>
             <div className="flex items-center gap-2 rounded-sm border bg-white/60 px-4 py-3" style={{ borderColor: CREAM_BORDER }}>
               <code className="flex-1 truncate text-sm text-neutral-700" style={{ fontFamily: MONO }}>
-                /app → start your first task
+                /dashboard → start your first task
               </code>
               <Link
-                href="/app"
+                href="/dashboard"
                 className="shrink-0 rounded-sm bg-neutral-950 px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
               >
                 Open →
@@ -537,7 +537,7 @@ export default async function Index(props: IIndexProps) {
           <p className="mx-auto mt-8 max-w-sm text-lg text-neutral-600">No commitment. No setup. Just start.</p>
           <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
             <Link
-              href="/app"
+              href="/dashboard"
               className="inline-flex items-center justify-center gap-2 rounded-sm bg-neutral-950 px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80"
             >
               Get Started for Free

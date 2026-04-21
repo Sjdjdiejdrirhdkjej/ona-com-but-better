@@ -6,7 +6,7 @@ type SignInButtonProps = {
   returnTo?: string;
 };
 
-export function SignInButton({ returnTo = '/app' }: SignInButtonProps) {
+export function SignInButton({ returnTo = '/dashboard' }: SignInButtonProps) {
   return (
     <button
       type="button"

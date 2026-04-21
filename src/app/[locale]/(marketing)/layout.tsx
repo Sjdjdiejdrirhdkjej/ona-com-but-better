@@ -51,7 +51,7 @@ export default async function Layout(props: {
         rightNav={(
           <>
             <Link
-              href="/app"
+              href="/dashboard"
               className="rounded-[4px] px-3 py-1.5 text-neutral-700 transition-colors hover:text-neutral-950"
             >
               Sign In

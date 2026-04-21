@@ -64,7 +64,7 @@ export function observeElementSize(element: Element, onResize: () => void): () =
   return () => window.removeEventListener('resize', onResize);
 }
 
-export function getSafeBrowserReturnPath(returnTo: string | null | undefined, fallback = '/app'): string {
+export function getSafeBrowserReturnPath(returnTo: string | null | undefined, fallback = '/dashboard'): string {
   if (!returnTo || typeof window === 'undefined') {
     return fallback;
   }

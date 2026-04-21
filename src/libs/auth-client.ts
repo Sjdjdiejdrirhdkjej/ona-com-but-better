@@ -38,8 +38,8 @@ function getLocaleFromPath(path: string) {
   return AppConfig.locales.includes(firstPathSegment || '') ? firstPathSegment! : AppConfig.defaultLocale;
 }
 
-function getLocalizedAppPath(locale: string) {
-  return locale === AppConfig.defaultLocale ? '/app' : `/${locale}/app`;
+function getLocalizedDashboardPath(locale: string) {
+  return locale === AppConfig.defaultLocale ? '/dashboard' : `/${locale}/dashboard`;
 }
 
 function getLocalizedSignInPath(locale: string) {
@@ -48,7 +48,7 @@ function getLocalizedSignInPath(locale: string) {
 
 export function signIn(returnTo?: string) {
   const locale = getLocaleFromPath(returnTo || window.location.pathname);
-  const safeReturnTo = getSafeBrowserReturnPath(returnTo, getLocalizedAppPath(locale));
+  const safeReturnTo = getSafeBrowserReturnPath(returnTo, getLocalizedDashboardPath(locale));
   const path = isMobileBrowser() ? getLocalizedSignInPath(locale) : '/api/login';
   const url = new URL(path, window.location.origin);
 
