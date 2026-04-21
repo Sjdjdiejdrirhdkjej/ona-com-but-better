@@ -118,6 +118,57 @@ const useCases = [
   },
 ];
 
+const fleetAgents = [
+  {
+    id: 'agent-01',
+    task: 'Migrate users table to UUID primary keys across 12 services',
+    status: 'working',
+    step: 'Running migrations on staging…',
+    tokens: '41k',
+    branch: 'feat/uuid-migration',
+  },
+  {
+    id: 'agent-02',
+    task: 'Patch CVE-2026-1337 in all Node 18 Dockerfiles',
+    status: 'working',
+    step: 'Opening PR on 7 of 9 repos…',
+    tokens: '18k',
+    branch: 'fix/cve-2026-1337',
+  },
+  {
+    id: 'agent-03',
+    task: 'Add OpenTelemetry traces to the payments service',
+    status: 'done',
+    step: 'PR #2841 opened · 4 tests passed',
+    tokens: '29k',
+    branch: 'feat/otel-payments',
+  },
+  {
+    id: 'agent-04',
+    task: 'Upgrade React 18 → 19 and fix breaking changes in UI lib',
+    status: 'working',
+    step: 'Resolving 3 type errors…',
+    tokens: '55k',
+    branch: 'chore/react-19-upgrade',
+  },
+  {
+    id: 'agent-05',
+    task: 'Generate SDK docs from OpenAPI spec and push to docs repo',
+    status: 'done',
+    step: 'PR #109 opened · docs deployed',
+    tokens: '12k',
+    branch: 'docs/sdk-autogen',
+  },
+  {
+    id: 'agent-06',
+    task: 'Triage 14 open Sentry issues and reproduce failing ones',
+    status: 'working',
+    step: 'Reproducing issue SENTRY-4482…',
+    tokens: '33k',
+    branch: 'fix/sentry-triage',
+  },
+];
+
 const blogPosts = [
   {
     tag: 'Security',
@@ -356,6 +407,104 @@ export default async function Index(props: IIndexProps) {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Agent fleets at scale ── */}
+      <section className="border-b" style={{ borderColor: CREAM_BORDER }}>
+        <div className="mx-auto max-w-7xl border-x px-6 py-10 sm:px-8 sm:py-14" style={{ borderColor: CREAM_BORDER }}>
+
+          {/* Header row */}
+          <div className="mb-10 grid gap-6 lg:grid-cols-12 lg:items-end">
+            <div className="lg:col-span-5">
+              <MonoLabel>Agent fleets at scale</MonoLabel>
+              <h2 className="text-4xl leading-[0.92] tracking-[-0.06em] text-neutral-950 sm:text-5xl" style={{ fontFamily: SERIF, fontWeight: 400 }}>
+                Dozens of agents.<br />One review queue.
+              </h2>
+            </div>
+            <p className="max-w-xl text-base leading-relaxed text-neutral-600 lg:col-span-7">
+              Dispatch any number of parallel agents from a single trigger. Each agent gets an isolated cloud environment, runs tests, and opens a reviewable PR — all without touching each other's state.
+            </p>
+          </div>
+
+          {/* Fleet panel mockup */}
+          <div
+            className="overflow-hidden"
+            style={{ backgroundColor: '#1a1c1a', borderRadius: 2 }}
+          >
+            {/* Window chrome */}
+            <div className="flex items-center justify-between border-b border-white/8 px-5 py-3">
+              <div className="flex items-center gap-1.5">
+                <span className="size-3 rounded-full bg-red-500/70" />
+                <span className="size-3 rounded-full bg-yellow-400/70" />
+                <span className="size-3 rounded-full bg-green-500/70" />
+                <span className="ml-3 text-[11px] text-white/30" style={{ fontFamily: MONO }}>ona — fleet dashboard</span>
+              </div>
+              <div className="flex items-center gap-3 text-[10px] text-white/30" style={{ fontFamily: MONO }}>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block size-1.5 rounded-full bg-emerald-400" />
+                  4 running
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block size-1.5 rounded-full bg-white/30" />
+                  2 done
+                </span>
+              </div>
+            </div>
+
+            {/* Agent rows */}
+            <div className="divide-y divide-white/5">
+              {fleetAgents.map(agent => (
+                <div key={agent.id} className="grid grid-cols-12 items-center gap-3 px-5 py-4">
+                  {/* Status dot */}
+                  <div className="col-span-1 flex justify-center">
+                    {agent.status === 'done'
+                      ? <span className="text-emerald-400 text-xs" style={{ fontFamily: MONO }}>✓</span>
+                      : <span className="inline-block size-1.5 animate-pulse rounded-full bg-emerald-400" />}
+                  </div>
+
+                  {/* Task description */}
+                  <div className="col-span-7">
+                    <p className="truncate text-xs text-[#d8d6b8]/80" style={{ fontFamily: MONO }}>{agent.task}</p>
+                    <p className="mt-0.5 truncate text-[10px] text-white/30" style={{ fontFamily: MONO }}>{agent.step}</p>
+                  </div>
+
+                  {/* Branch */}
+                  <div className="col-span-3 hidden md:block">
+                    <span className="truncate rounded px-2 py-1 text-[10px] text-emerald-400/70" style={{ fontFamily: MONO, backgroundColor: 'rgba(52,211,153,0.08)' }}>
+                      {agent.branch}
+                    </span>
+                  </div>
+
+                  {/* Tokens */}
+                  <div className="col-span-1 text-right text-[10px] text-white/25" style={{ fontFamily: MONO }}>
+                    {agent.tokens}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Bottom bar */}
+            <div className="flex items-center justify-between border-t border-white/8 px-5 py-3 text-[10px] text-white/25" style={{ fontFamily: MONO }}>
+              <span>6 agents dispatched from webhook · trigger: merge to main</span>
+              <span>ona-hands-off</span>
+            </div>
+          </div>
+
+          {/* Stats row */}
+          <div className="mt-8 grid border md:grid-cols-3" style={{ borderColor: CREAM_BORDER }}>
+            {[
+              { stat: 'Unlimited', label: 'parallel agents per trigger' },
+              { stat: 'Isolated', label: 'cloud VM per agent, no shared state' },
+              { stat: 'PR-first', label: 'every agent delivers a reviewable diff' },
+            ].map(item => (
+              <div key={item.stat} className="border-b p-6 last:border-b-0 sm:p-8 md:border-b-0 md:border-r md:last:border-r-0" style={{ borderColor: CREAM_BORDER }}>
+                <p className="text-3xl leading-none tracking-[-0.06em] text-neutral-950 sm:text-4xl" style={{ fontFamily: SERIF, fontWeight: 400 }}>{item.stat}</p>
+                <p className="mt-2 text-sm text-neutral-500">{item.label}</p>
+              </div>
+            ))}
+          </div>
+
         </div>
       </section>
 
