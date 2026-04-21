@@ -69,17 +69,17 @@ export default async function About(props: IAboutProps) {
         ))}
       </section>
 
-      <section className="grid gap-8 rounded-2xl border border-black/10 bg-gradient-to-b from-neutral-950 to-neutral-900 p-6 text-neutral-100 sm:p-8 md:grid-cols-2 dark:border-white/10">
+      <section className="grid gap-8 rounded-2xl border border-black/10 bg-gradient-to-b from-neutral-100 to-neutral-50 p-6 text-neutral-900 sm:p-8 md:grid-cols-2 dark:border-white/10 dark:from-neutral-950 dark:to-neutral-900 dark:text-neutral-100">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">What we are building</h2>
-          <p className="mt-3 text-sm leading-relaxed text-neutral-300">
+          <p className="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">
             A full-stack agent runtime where AI can plan, execute, and deliver inside secure cloud environments. The system connects code,
             tests, tooling, and workflow context so every run produces useful output your team can review.
           </p>
         </div>
-        <ul className="space-y-3 text-sm text-neutral-200">
+        <ul className="space-y-3 text-sm text-neutral-700 dark:text-neutral-200">
           {values.map(value => (
-            <li key={value} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <li key={value} className="rounded-lg border border-black/10 bg-white/70 px-3 py-2 dark:border-white/10 dark:bg-white/5">
               {value}
             </li>
           ))}

@@ -11,12 +11,8 @@ export default async function Layout(props: {
   setRequestLocale(locale);
 
   return (
-    <div style={{
-      '--bg': '#f2ede3',
-      '--bg-2': '#e8e2d6',
-      '--bg-3': '#ddd6c8',
-      '--bg-header': 'rgba(242, 237, 227, 0.92)',
-    } as React.CSSProperties}
+    <div
+      className="[--bg:#f2ede3] [--bg-2:#e8e2d6] [--bg-3:#ddd6c8] [--bg-header:rgba(242,237,227,0.92)] dark:[--bg:#0b0b0d] dark:[--bg-2:#111216] dark:[--bg-3:#17181d] dark:[--bg-header:rgba(11,11,13,0.9)]"
     >
       <BaseTemplate
         leftNav={(

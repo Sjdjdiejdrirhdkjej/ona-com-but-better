@@ -14,6 +14,8 @@ import { callLibrarianProToolDefinition, isCallLibrarianProTool, runLibrarianPro
 import { callOracleToolDefinition, isCallOracleTool, runOracleSubagent } from '@/libs/Oracle';
 import { callOverseerToolDefinition, isCallOverseerTool, runOverseerSubagent } from '@/libs/Overseer';
 import { callEditorToolDefinition, isCallEditorTool, runEditorSubagent } from '@/libs/Editor';
+import { callFleetToolDefinition, isFleetTool, runFleet } from '@/libs/Fleet';
+import type { FleetTask } from '@/libs/Fleet';
 import type { TouchedFileDiff } from '@/libs/FileDiff';
 
 export const runtime = 'nodejs';
@@ -343,6 +345,21 @@ For all other requests (no specific repo target), tell the user to connect their
 
 ---
 
+### \`dispatch_fleet\` — parallel agent fleet
+
+**Use for:** any work that naturally splits into N≥2 fully independent coding tasks that can run simultaneously. Common patterns:
+- Applying the same change (CVE patch, framework upgrade, CI config update) across multiple repositories.
+- Running different independent tasks at the same time to save wall-clock time.
+- Batch operations where each unit of work is self-contained and produces its own PR.
+
+**How it works:** Each task is assigned to a dedicated sub-agent with its own isolated Daytona sandbox. All agents run in parallel. Each agent has the full tool suite (GitHub, Daytona, Librarian, Oracle), creates a branch, opens a PR, and returns a structured result. You collect all results and present a fleet summary to the user.
+
+**Do NOT use for:** sequential tasks where step B depends on output from step A — run those in the normal agent loop instead. Also do not split a single-file change into fleet tasks; use the normal loop.
+
+**Example:** \`dispatch_fleet({ tasks: [{ id: "agent-01", task: "Upgrade lodash from 4.17.20 to 4.17.21 in package.json and package-lock.json", repository: "acme/frontend" }, { id: "agent-02", task: "Upgrade lodash from 4.17.20 to 4.17.21 in package.json and package-lock.json", repository: "acme/backend" }] })\`
+
+---
+
 ## WORKFLOW PLAYBOOKS
 
 ### Feature implementation from an issue
@@ -600,6 +617,12 @@ function toolLabel(name: string, args: Record<string, unknown> = {}): string {
     case 'call_oracle': {
       const request = s('request');
       return request ? `Oracle: ${trim(request, 55)}` : 'Consulting oracle';
+    }
+    case 'dispatch_fleet': {
+      const tasks = Array.isArray(args.tasks) ? args.tasks as Array<{ task?: unknown }> : [];
+      return tasks.length > 0
+        ? `Dispatching fleet: ${tasks.length} parallel agent${tasks.length === 1 ? '' : 's'}`
+        : 'Dispatching agent fleet';
     }
     case 'call_overseer':
       return 'Overseer: reviewing plan';
@@ -1443,7 +1466,7 @@ export async function POST(req: NextRequest) {
             messages: conversation,
             tools: isPlanMode
               ? [callOverseerToolDefinition, ...ULTRAWORK_TOOLS]
-              : [...githubToolDefinitions.filter(t => !['github_upsert_file', 'github_delete_file'].includes(t.function.name)), ...daytonaToolDefinitions, callLibrarianProToolDefinition, callOracleToolDefinition, callEditorToolDefinition, ...ULTRAWORK_TOOLS],
+              : [...githubToolDefinitions.filter(t => !['github_upsert_file', 'github_delete_file'].includes(t.function.name)), ...daytonaToolDefinitions, callLibrarianProToolDefinition, callOracleToolDefinition, callEditorToolDefinition, callFleetToolDefinition, ...ULTRAWORK_TOOLS],
             tool_choice: 'auto',
             max_tokens: agentMaxTokens,
             temperature: agentTemperature,
@@ -1690,6 +1713,34 @@ export async function POST(req: NextRequest) {
                   : JSON.stringify(result);
                 emit({ type: 'editor_report', parentLabel, report: editorReport });
                 if (jobId) persistJobEvent(jobId, 'editor_report', { parentLabel, report: editorReport }).catch(() => {});
+              } else if (isFleetTool(toolName)) {
+                const rawTasks = Array.isArray(toolArgs.tasks) ? toolArgs.tasks : [];
+                const fleetTasks: FleetTask[] = rawTasks.map((t: unknown) => {
+                  const item = t as Record<string, unknown>;
+                  return {
+                    id: String(item.id ?? crypto.randomUUID()),
+                    task: String(item.task ?? ''),
+                    repository: typeof item.repository === 'string' ? item.repository : undefined,
+                    context: typeof item.context === 'string' ? item.context : undefined,
+                  };
+                }).filter((t: FleetTask) => t.task);
+
+                if (fleetTasks.length === 0) {
+                  result = { error: 'dispatch_fleet requires at least one task with a non-empty "task" field.' };
+                } else {
+                  const parentLabel = label;
+                  emit({ type: 'fleet_dispatch_start', parentLabel, tasks: fleetTasks.map(t => ({ id: t.id, task: t.task })) });
+                  if (jobId) persistJobEvent(jobId, 'fleet_dispatch_start', { parentLabel, tasks: fleetTasks.map(t => ({ id: t.id, task: t.task })) }).catch(() => {});
+
+                  const fleetResults = await runFleet(fleetTasks, githubToken, (agentId, event, detail) => {
+                    emit({ type: 'fleet_agent_update', parentLabel, agentId, event, detail: detail ?? '' });
+                    if (jobId) persistJobEvent(jobId, 'fleet_agent_update', { parentLabel, agentId, event, detail: detail ?? '' }).catch(() => {});
+                  });
+
+                  emit({ type: 'fleet_dispatch_done', parentLabel, results: fleetResults });
+                  if (jobId) persistJobEvent(jobId, 'fleet_dispatch_done', { parentLabel, results: fleetResults }).catch(() => {});
+                  result = { fleet_results: fleetResults };
+                }
               } else if (isDaytonaTool(toolName)) {
                 result = await runDaytonaTool(toolName, toolArgs);
                 if (toolName === 'sandbox_create' && conversationId) {
