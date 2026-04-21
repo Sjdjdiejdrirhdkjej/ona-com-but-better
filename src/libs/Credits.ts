@@ -1,5 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
-import { db } from '@/libs/DB';
+import { getDb } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
 import { userCreditsSchema } from '@/models/Schema';
 
@@ -62,6 +62,7 @@ export async function seedUserCreditsIfNew(
 ): Promise<number> {
   if (!userId || amount <= 0) return 0;
   try {
+    const db = await getDb();
     const now = new Date();
     const rows = await db
       .insert(userCreditsSchema)
@@ -82,6 +83,7 @@ export async function seedUserCreditsIfNew(
 
 export async function getUserCredits(userId: string): Promise<number> {
   try {
+    const db = await getDb();
     const rows = await db
       .select({ credits: userCreditsSchema.credits })
       .from(userCreditsSchema)
@@ -109,6 +111,7 @@ export async function deductCredits(userId: string, amount: number): Promise<num
     return null;
   }
   try {
+    const db = await getDb();
     const now = new Date();
     const [row] = await db
       .insert(userCreditsSchema)
@@ -146,6 +149,7 @@ export async function topupUserCredits(userId: string, amount: number): Promise<
     return null;
   }
   try {
+    const db = await getDb();
     const now = new Date();
     const [row] = await db
       .insert(userCreditsSchema)
