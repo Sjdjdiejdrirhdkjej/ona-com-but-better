@@ -85,26 +85,27 @@ function waitForDrain(): void {
 }
 
 export function setupGracefulShutdown(): void {
-  if (typeof process === 'undefined' || !process.on) {
+  const proc = (globalThis as { process?: { on?: (event: string, handler: (...args: unknown[]) => void) => void } }).process;
+  if (!proc?.on) {
     return;
   }
 
-  process.on('SIGTERM', () => {
+  proc.on('SIGTERM', () => {
     logger.info('SIGTERM received');
     initiateShutdown();
   });
 
-  process.on('SIGINT', () => {
+  proc.on('SIGINT', () => {
     logger.info('SIGINT received');
     initiateShutdown();
   });
 
-  process.on('uncaughtException', (error) => {
+  proc.on('uncaughtException', (error) => {
     logger.error('Uncaught Exception:', error);
     initiateShutdown();
   });
 
-  process.on('unhandledRejection', (reason) => {
+  proc.on('unhandledRejection', (reason) => {
     logger.error('Unhandled Rejection:', reason);
     initiateShutdown();
   });
