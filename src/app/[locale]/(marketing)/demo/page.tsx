@@ -5,7 +5,10 @@ import { setRequestLocale } from 'next-intl/server';
 const SERIF = 'Georgia, "Times New Roman", serif';
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace';
 
-type Props = { params: Promise<{ locale: string }> };
+type Props = {
+  params: Promise<{ locale: string }>;
+  searchParams: Promise<{ submitted?: string }>;
+};
 
 export const metadata: Metadata = {
   title: 'Request a demo — ONA',
@@ -21,6 +24,7 @@ const agenda = [
 
 export default async function DemoPage(props: Props) {
   const { locale } = await props.params;
+  const { submitted } = await props.searchParams;
   setRequestLocale(locale);
 
   return (
@@ -46,6 +50,16 @@ export default async function DemoPage(props: Props) {
 
             <form className="rounded-sm border p-6 sm:p-8 lg:col-span-5" style={{ borderColor: 'var(--cream-border)' }} action="/api/demo-request" method="post">
               <div className="space-y-5">
+                {submitted === 'ok' && (
+                  <div className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+                    Thanks — we got your request and will reply within one business day.
+                  </div>
+                )}
+                {submitted === 'error' && (
+                  <div className="rounded-sm border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+                    Something went wrong. Please double-check the fields and try again.
+                  </div>
+                )}
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400" style={{ fontFamily: MONO }}>Work email</span>
                   <input required type="email" name="email" className="w-full rounded-sm border bg-transparent px-3 py-2.5 text-sm text-neutral-900 outline-none focus:border-neutral-500 dark:text-neutral-100" style={{ borderColor: 'var(--cream-border)' }} placeholder="you@company.com" />

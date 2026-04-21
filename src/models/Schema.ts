@@ -116,6 +116,15 @@ export const codebaseMemorySchema = pgTable('codebase_memory', {
   uniqueIndex('codebase_memory_user_key_idx').on(table.userId, table.key),
 ]);
 
+export const demoRequestsSchema = pgTable('demo_requests', {
+  id: text('id').primaryKey().default(sql`gen_random_uuid()`),
+  email: text('email').notNull(),
+  company: text('company').notNull(),
+  size: text('size').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+});
+
 export const conversationSuperAgentsSchema = pgTable('conversation_super_agents', {
   conversationId: text('conversation_id')
     .primaryKey()

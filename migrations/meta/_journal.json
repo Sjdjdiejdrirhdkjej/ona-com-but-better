@@ -71,6 +71,20 @@
       "when": 1776700000000,
       "tag": "0009_add_super_agents",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776800000000,
+      "tag": "0010_add_codebase_memory",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776900000000,
+      "tag": "0011_add_demo_requests",
+      "breakpoints": true
     }
   ]
 }
