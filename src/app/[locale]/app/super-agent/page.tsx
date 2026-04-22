@@ -352,8 +352,8 @@ function SuperAgentPageInner() {
 
   return (
     <div
-      className="flex min-h-[100dvh] flex-col"
-      style={{ backgroundColor: 'var(--bg-base, #f9f9f8)' } as React.CSSProperties}
+      className="flex min-h-[100dvh] flex-col text-gray-950 dark:text-gray-50"
+      style={{ backgroundColor: 'var(--bg)' } as React.CSSProperties}
     >
       {/* Header */}
       <header
