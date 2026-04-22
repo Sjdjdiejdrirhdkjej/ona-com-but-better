@@ -41,5 +41,14 @@
   },
   "optionalDependencies": {
     "@next/swc-linux-x64-gnu": "^15.5.15"
+  },
+  "overrides": {
+    "esbuild": "^0.25.0",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    },
+    "@esbuild-kit/esm-loader": {
+      "esbuild": "^0.25.0"
+    }
   }
 }
