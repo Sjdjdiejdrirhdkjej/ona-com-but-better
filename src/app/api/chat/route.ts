@@ -34,6 +34,34 @@ type ToolStepUpdate = {
   traceRequest?: string;
 };
 
+/**
+ * Build a Manus-style "todo recitation" message that re-states the active
+ * objective at the very end of the context window. Returns null when there
+ * is no useful list to recite (no todos, or every todo is done).
+ */
+function buildTodoRecitation(todos: TodoItem[], iteration: number): string | null {
+  if (!todos.length) return null;
+  const open = todos.filter(t => t.status !== 'done');
+  if (!open.length) {
+    return `<todo_recitation iteration="${iteration}">\nAll planned todos are marked done. If the work is verified, call \`task_complete\` now with a one-paragraph summary; otherwise add the missing verification step with \`todo_write\` and continue.\n</todo_recitation>`;
+  }
+  const inProgress = open.filter(t => t.status === 'in_progress');
+  const pending = open.filter(t => t.status === 'pending');
+  const lines: string[] = [`<todo_recitation iteration="${iteration}">`];
+  lines.push('Open todos (re-cited so they sit at the end of your context):');
+  if (inProgress.length) {
+    lines.push('In progress:');
+    for (const t of inProgress) lines.push(`- [~] ${t.task}`);
+  }
+  if (pending.length) {
+    lines.push('Pending:');
+    for (const t of pending) lines.push(`- [ ] ${t.task}`);
+  }
+  lines.push('Pick the single in-progress item, advance it with one tool batch, and update the list with `todo_write` as soon as its acceptance criterion is satisfied.');
+  lines.push('</todo_recitation>');
+  return lines.join('\n');
+}
+
 function getToolTrace(toolName: string, toolArgs: Record<string, unknown>, label: string): ToolStepUpdate {
   if (toolName === 'call_oracle') {
     return {
@@ -179,6 +207,31 @@ const MAX_AGENT_ITERATIONS = 80;
 const CURRENT_DATE = new Date().toISOString().slice(0, 10);
 
 const SYSTEM_PROMPT = `You are **ONA**, a fully autonomous background software engineering agent. Your mission is singular: **task in → finished work out**. The user should be able to send a task, walk away, and return to a complete, verified result or a clear explanation of the one genuinely blocking issue.
+
+<agent_loop>
+You operate in an iterative agent loop modelled on Manus. On every turn, run these six steps in order, then yield control back to the loop:
+
+1. **Analyze events** — Read the latest user message, tool results, and the recited todo list at the end of the context. Identify what just changed and what objective is currently active. The most recent observation is the most important signal.
+2. **Select tools** — Based on the active objective, choose exactly one batch of tool calls to advance it. Prefer parallel calls when they are independent. Do not narrate intent without executing.
+3. **Wait for execution** — The runtime will execute the tools and append their observations to the event stream as the next turn's input. Do not assume results; wait for them.
+4. **Iterate** — Choose only one tool batch per iteration, advance methodically, and let observations drive the next decision. Leave failed attempts visible in context — they are part of how you learn within the loop.
+5. **Submit results** — When all todos are done and verified, send a concise final message that delivers the deliverable (PR link, summary, evidence) and call \`task_complete\` to exit. \`task_complete\` is the only exit from the loop.
+6. **Standby** — After \`task_complete\` you go idle until the next user input.
+</agent_loop>
+
+<planner_module>
+Treat \`todo_write\` as your planner. At the start of any multi-step task, draft the full plan as a todo list. Each todo is a concrete, verifiable step that maps to a tool batch (or a small group of tool batches). Re-plan whenever new evidence invalidates a step — rewrite the todo list rather than silently abandoning items.
+</planner_module>
+
+<todo_rules>
+- The system recites your current open todos at the end of every iteration's context. Use that recitation as the ground truth of what is left to do.
+- Maintain exactly one \`in_progress\` step at a time; mark a step \`done\` only after its acceptance criteria are visibly satisfied by tool evidence.
+- If you discover a new required step mid-task, append it to the todo list with \`todo_write\` immediately — do not keep it implicit in your head.
+</todo_rules>
+
+<error_handling>
+When a tool fails or returns an unexpected result, do not retry the same call unchanged. Update your understanding, choose a different approach, and (if the failure is non-trivial) call \`call_oracle\` for a second-opinion plan. Failed actions and their stack traces stay in the context on purpose — read them before acting again.
+</error_handling>
 
 Today's date: **${CURRENT_DATE}**. Your training data has a knowledge cutoff that predates today. Treat anything your training data says about specific library versions, API shapes, endpoint URLs, package names, or configuration options as **potentially outdated** — always use tools to verify before writing code against external dependencies.
 
@@ -1495,6 +1548,16 @@ export async function POST(req: NextRequest) {
           if (jobId) persistJobEvent(jobId, 'context_compressed', { iteration }).catch(() => {});
         }
 
+        // ── Manus-style todo recitation ─────────────────────────────────────
+        // Re-cite the open todo list at the very end of the context window so
+        // the active objective sits in the model's most-attended region. This
+        // is appended transiently per-iteration, never persisted into the
+        // conversation history (which would compound on every turn).
+        const recitation = buildTodoRecitation(todos, iteration);
+        const callMessages = recitation
+          ? [...conversation, { role: 'user' as const, content: recitation }]
+          : conversation;
+
         if (!contextBudgetWarned && estimateMessagesTokens(conversation) >= CONTEXT_WARN_TOKENS) {
           contextBudgetWarned = true;
           conversation.push({
@@ -1507,7 +1570,7 @@ export async function POST(req: NextRequest) {
         let iterText = '';
         const { content, toolCalls, finishReason } = await streamChargedFireworksCall(
           {
-            messages: conversation,
+            messages: callMessages,
             tools: isPlanMode
               ? [callOverseerToolDefinition, ...ULTRAWORK_TOOLS]
               : [...githubToolDefinitions.filter(t => !['github_upsert_file', 'github_delete_file'].includes(t.function.name)), ...daytonaToolDefinitions, callLibrarianProToolDefinition, callOracleToolDefinition, callEditorToolDefinition, callFleetToolDefinition, ...ULTRAWORK_TOOLS],
