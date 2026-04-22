@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { CreditsChip } from '@/components/CreditsChip';
 import { UserDropdown } from '@/components/UserDropdown';
@@ -29,47 +29,46 @@ type SuperAgentConfig = {
   lastRunStatus: string;
 };
 
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-    const el = document.createElement('textarea');
-    el.value = text;
-    el.style.position = 'fixed';
-    el.style.opacity = '0';
-    document.body.appendChild(el);
-    el.focus();
-    el.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(el);
-    return ok;
-  } catch {
-    return false;
+type Message = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+function createId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
   }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function SuperAgentPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const conversationId = searchParams.get('conversationId');
+  const initialConversationId = searchParams.get('conversationId');
 
-  const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [loadingConversation, setLoadingConversation] = useState(false);
+
   const [config, setConfig] = useState<SuperAgentConfig | null>(null);
-
   const [enabled, setEnabled] = useState(false);
   const [heartbeat, setHeartbeat] = useState(String(DEFAULT_SUPER_AGENT_HEARTBEAT_MINUTES));
   const [prompt, setPrompt] = useState(DEFAULT_SUPER_AGENT_PROMPT);
   const [model, setModel] = useState<string>(DEFAULT_SUPER_AGENT_MODEL);
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [waking, setWaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [wakeSuccess, setWakeSuccess] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [urlCopied, setUrlCopied] = useState(false);
+
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const applyConfig = useCallback((cfg: SuperAgentConfig) => {
     setConfig(cfg);
@@ -79,32 +78,201 @@ function SuperAgentPageInner() {
     setModel(cfg.model);
   }, []);
 
+  // Load conversation messages + config when conversationId changes
   useEffect(() => {
-    if (!conversationId) {
-      setNotFound(true);
-      setLoading(false);
-      return;
-    }
-
+    if (!conversationId) return;
+    let cancelled = false;
     (async () => {
+      setLoadingConversation(true);
       try {
-        const res = await fetch(`/api/conversations/${conversationId}/super-agent`);
-        if (!res.ok) {
-          setNotFound(true);
-        } else {
-          const data = await res.json() as SuperAgentConfig;
+        const [msgRes, cfgRes] = await Promise.all([
+          fetch(`/api/conversations/${conversationId}/messages`),
+          fetch(`/api/conversations/${conversationId}/super-agent`),
+        ]);
+        if (!cancelled && msgRes.ok) {
+          const data = await msgRes.json() as { messages?: { id: string; role: string; content: string }[] };
+          const loaded = (data.messages ?? [])
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(m => ({
+              id: m.id,
+              role: m.role as 'user' | 'assistant',
+              content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+            }));
+          setMessages(loaded);
+        }
+        if (!cancelled && cfgRes.ok) {
+          const data = await cfgRes.json() as SuperAgentConfig;
           applyConfig(data);
         }
       } catch {
-        setNotFound(true);
+        // ignore
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoadingConversation(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId, applyConfig]);
 
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, sending]);
+
+  // Auto-resize textarea
+  function autoResize(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setInput(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+  }
+
+  function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void send();
+    }
+  }
+
+  async function ensureConversation(title: string): Promise<string> {
+    if (conversationId) return conversationId;
+    const id = createId();
+    try {
+      await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, title }),
+      });
+    } catch {
+      // ignore — fall through, server will reject downstream if needed
+    }
+    setConversationId(id);
+    router.replace(`/app/super-agent?conversationId=${id}`);
+    return id;
+  }
+
+  async function send() {
+    const text = input.trim();
+    if (!text || sending) return;
+    setError(null);
+    setSending(true);
+
+    const convId = await ensureConversation(text.slice(0, 80));
+
+    const userMsg: Message = { id: createId(), role: 'user', content: text };
+    const assistantId = createId();
+    const jobId = createId();
+    setMessages(prev => [...prev, userMsg, { id: assistantId, role: 'assistant', content: '' }]);
+    setInput('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+    // Persist the user message
+    try {
+      await fetch(`/api/conversations/${convId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: userMsg.id, role: 'user', content: userMsg.content }),
+      });
+    } catch {}
+
+    const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
+    let currentAssistantId = assistantId;
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: history,
+          conversationId: convId,
+          assistantMessageId: assistantId,
+          jobId,
+          model,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        throw new Error(`API error ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+          try {
+            const json = JSON.parse(data) as {
+              delta?: string;
+              type?: string;
+              error?: boolean;
+              message?: string;
+              nextAssistantMsgId?: string;
+            };
+            if (json.type === 'next_assistant_msg' && json.nextAssistantMsgId) {
+              currentAssistantId = json.nextAssistantMsgId;
+              const newId = json.nextAssistantMsgId;
+              setMessages(prev =>
+                prev.some(m => m.id === newId)
+                  ? prev
+                  : [...prev, { id: newId, role: 'assistant', content: '' }],
+              );
+            } else if (typeof json.delta === 'string' && json.delta) {
+              const delta = json.delta;
+              const targetId = currentAssistantId;
+              setMessages(prev => prev.map(m =>
+                m.id === targetId ? { ...m, content: m.content + delta } : m,
+              ));
+            } else if (json.type === 'error' && json.message) {
+              setError(json.message);
+            }
+          } catch {
+            // ignore malformed events
+          }
+        }
+      }
+
+      // Refresh super-agent config so status (next run, etc.) reflects the new conversation
+      try {
+        const cfgRes = await fetch(`/api/conversations/${convId}/super-agent`);
+        if (cfgRes.ok) {
+          applyConfig(await cfgRes.json() as SuperAgentConfig);
+        }
+      } catch {}
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError((err as Error).message ?? 'Something went wrong while contacting the agent.');
+      }
+    } finally {
+      abortRef.current = null;
+      setSending(false);
+    }
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setSending(false);
+  }
+
   async function handleSave() {
-    if (!conversationId) return;
+    if (!conversationId) {
+      setError('Send your first message before saving heartbeat settings.');
+      return;
+    }
     const heartbeatMinutes = Math.max(1, Number.parseInt(heartbeat, 10) || DEFAULT_SUPER_AGENT_HEARTBEAT_MINUTES);
     setError(null);
     setSaving(true);
@@ -132,7 +300,10 @@ function SuperAgentPageInner() {
   }
 
   async function handleWakeNow() {
-    if (!conversationId) return;
+    if (!conversationId) {
+      setError('Send your first message before waking the agent.');
+      return;
+    }
     setError(null);
     setWakeSuccess(false);
     setWaking(true);
@@ -144,9 +315,22 @@ function SuperAgentPageInner() {
       });
       if (!res.ok) throw new Error('Failed');
       setWakeSuccess(true);
-      setTimeout(() => {
-        router.push(`/app?conversationId=${conversationId}`);
-      }, 1400);
+      setTimeout(() => setWakeSuccess(false), 2500);
+      // Reload messages so the heartbeat-injected user message and assistant response show up
+      try {
+        const msgRes = await fetch(`/api/conversations/${conversationId}/messages`);
+        if (msgRes.ok) {
+          const data = await msgRes.json() as { messages?: { id: string; role: string; content: string }[] };
+          const loaded = (data.messages ?? [])
+            .filter(m => m.role === 'user' || m.role === 'assistant')
+            .map(m => ({
+              id: m.id,
+              role: m.role as 'user' | 'assistant',
+              content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+            }));
+          setMessages(loaded);
+        }
+      } catch {}
     } catch {
       setError('Could not wake the super agent. Please try again.');
     } finally {
@@ -162,6 +346,9 @@ function SuperAgentPageInner() {
         : status === 'success'
           ? 'text-emerald-600 dark:text-emerald-400'
           : 'text-gray-500 dark:text-gray-400';
+
+  const canConfigure = !!conversationId;
+  const showEmptyState = !loadingConversation && messages.length === 0;
 
   return (
     <div
@@ -196,316 +383,453 @@ function SuperAgentPageInner() {
         </div>
       </header>
 
-      {/* Body */}
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10 sm:py-16">
-        {/* Back link */}
-        <Link
-          href={conversationId ? `/app?conversationId=${conversationId}` : '/app'}
-          className="mb-8 inline-flex items-center gap-1.5 text-xs text-gray-400 transition-colors hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M7.5 2L3.5 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Back to task
-        </Link>
-
-        <div className="mb-8">
-          <div className="mb-1.5 flex items-center gap-2.5">
-            <span
-              className={`size-2 shrink-0 rounded-full ${
-                config?.enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'
-              }`}
-            />
-            <h1 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">Super agent</h1>
-          </div>
-          <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
-            Wakes this conversation autonomously on a schedule to continue working. Use{' '}
-            <strong className="font-medium text-gray-700 dark:text-gray-300">Wake Now</strong> to trigger it
-            instantly, or enable the heartbeat and point a cron job at your deployment.
-          </p>
+      {/* Sub-header */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black/6 px-3 py-2 dark:border-white/8 sm:px-6">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={`size-2 shrink-0 rounded-full ${
+              config?.enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'
+            }`}
+          />
+          <h1 className="truncate text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+            Super agent
+          </h1>
+          <span className="hidden truncate text-[11px] text-gray-400 dark:text-gray-500 sm:inline">
+            Chat with the agent — schedule wake-ups to keep it working autonomously.
+          </span>
         </div>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(o => !o)}
+          className="flex shrink-0 items-center gap-1.5 rounded-full border border-black/8 bg-white/80 px-3 py-1 text-[11px] font-medium text-gray-600 transition-colors hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:border-white/20 dark:hover:text-gray-100"
+        >
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+            <circle cx="6" cy="6" r="1.6" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M6 1.5v1.4M6 9.1v1.4M10.5 6H9.1M2.9 6H1.5M9.18 2.82l-.99.99M3.81 8.19l-.99.99M9.18 9.18l-.99-.99M3.81 3.81l-.99-.99" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+          {settingsOpen ? 'Hide schedule' : 'Wake-up schedule'}
+        </button>
+      </div>
 
-        {loading && (
-          <div className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="animate-spin">
-              <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.4" strokeOpacity="0.25" />
-              <path d="M7 1.5A5.5 5.5 0 0112.5 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-            Loading configuration…
-          </div>
-        )}
-
-        {!loading && notFound && (
-          <div
-            className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300"
-          >
-            {conversationId
-              ? 'Send the first task to save this conversation before enabling the super agent.'
-              : 'No conversation selected. Go back and open a task first.'}
-          </div>
-        )}
-
-        {!loading && !notFound && (
-          <div className="space-y-4">
-            {/* Alerts */}
-            {error && (
-              <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800/50 dark:bg-red-950/30">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="mt-0.5 shrink-0 text-red-500">
-                  <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3" />
-                  <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                <p className="text-xs text-red-700 dark:text-red-300">{error}</p>
-              </div>
-            )}
-
-            {wakeSuccess && (
-              <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/30">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-emerald-500">
-                  <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3" />
-                  <path d="M4.5 7l2 2 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <p className="text-xs text-emerald-700 dark:text-emerald-300">Super agent woke up — working in the background. Redirecting…</p>
-              </div>
-            )}
-
-            {saveSuccess && (
-              <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/50 dark:bg-emerald-950/30">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 text-emerald-500">
-                  <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3" />
-                  <path d="M4.5 7l2 2 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <p className="text-xs text-emerald-700 dark:text-emerald-300">Settings saved.</p>
-              </div>
-            )}
-
-            {/* Enable heartbeat */}
-            <label
-              className="flex cursor-pointer items-center justify-between rounded-2xl border border-gray-200 px-4 py-3 dark:border-gray-800"
-              style={{ backgroundColor: 'var(--bg-card)' }}
-            >
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Enable heartbeat</p>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  Let a cron job wake this conversation automatically on a schedule.
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={e => { setEnabled(e.target.checked); setError(null); }}
-                className="size-4"
-              />
-            </label>
-
-            {/* Heartbeat endpoint */}
-            {enabled && (
-              <div
-                className="rounded-2xl border border-gray-200 bg-gray-50/50 px-4 py-3 dark:border-gray-800 dark:bg-white/3"
-                style={{ backgroundColor: 'var(--bg-card)' }}
-              >
-                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">Heartbeat endpoint</p>
-                <div className="flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-mono text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-                    POST /api/super-agent/heartbeat
-                  </code>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const url = `${window.location.origin}/api/super-agent/heartbeat`;
-                      const ok = await copyTextToClipboard(url);
-                      if (ok) {
-                        setUrlCopied(true);
-                        setTimeout(() => setUrlCopied(false), 2000);
-                      }
-                    }}
-                    className="flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 px-2 py-1.5 text-[11px] text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-900 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:text-gray-100"
-                  >
-                    {urlCopied
-                      ? (
-                          <>
-                            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                              <path d="M1.5 5.5l2.5 2.5 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            Copied
-                          </>
-                        )
-                      : (
-                          <>
-                            <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                              <rect x="3.5" y="1" width="6.5" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.2" />
-                              <path d="M1 3.5v6a1 1 0 001 1h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                            </svg>
-                            Copy
-                          </>
-                        )}
-                  </button>
+      {/* Body: chat (left) + settings drawer (right) */}
+      <div className="flex flex-1 overflow-hidden">
+        <main className="flex flex-1 flex-col overflow-hidden">
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-3 py-6 sm:px-6 sm:py-8">
+            <div className="mx-auto max-w-3xl">
+              {loadingConversation && (
+                <div className="flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="animate-spin">
+                    <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.4" strokeOpacity="0.25" />
+                    <path d="M7 1.5A5.5 5.5 0 0112.5 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                  Loading conversation…
                 </div>
-                <p className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
-                  Authenticate with header{' '}
-                  <code className="rounded bg-gray-100 px-1 py-px font-mono dark:bg-gray-800">
-                    x-ona-heartbeat-secret: &lt;your secret&gt;
-                  </code>
-                  . Set the{' '}
-                  <code className="rounded bg-gray-100 px-1 py-px font-mono dark:bg-gray-800">
-                    SUPER_AGENT_HEARTBEAT_SECRET
-                  </code>{' '}
-                  env var to configure the secret.
-                </p>
-              </div>
-            )}
+              )}
 
-            {/* Interval + Model */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
-                  Heartbeat interval (minutes)
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  max={1440}
-                  value={heartbeat}
-                  onChange={e => setHeartbeat(e.target.value)}
-                  className="w-full rounded-2xl border border-gray-200 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-gray-400 dark:border-gray-800 dark:text-gray-100 dark:focus:border-gray-600"
-                  style={{ backgroundColor: 'var(--bg-card)' }}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
-                  Model
-                </span>
+              {showEmptyState && (
+                <div className="mx-auto mt-6 max-w-xl text-center">
+                  <div className="mx-auto mb-4 flex size-10 items-center justify-center rounded-full bg-gray-950 text-white dark:bg-gray-100 dark:text-gray-950">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      <circle cx="8" cy="8" r="2.4" stroke="currentColor" strokeWidth="1.5" />
+                    </svg>
+                  </div>
+                  <h2 className="mb-1.5 text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+                    Start a conversation with your super agent
+                  </h2>
+                  <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                    Send a message to kick off a task. Then open
+                    {' '}
+                    <button
+                      type="button"
+                      onClick={() => setSettingsOpen(true)}
+                      className="font-medium text-gray-700 underline-offset-2 hover:underline dark:text-gray-200"
+                    >
+                      Wake-up schedule
+                    </button>
+                    {' '}
+                    to make the agent loop on a heartbeat — or trigger
+                    {' '}
+                    <strong className="font-medium text-gray-700 dark:text-gray-300">Wake Now</strong>
+                    {' '}
+                    to run it instantly.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-5">
+                {messages.map(msg => (
+                  <MessageBubble key={msg.id} msg={msg} />
+                ))}
+                {sending && messages[messages.length - 1]?.role === 'assistant' && !messages[messages.length - 1]?.content && (
+                  <TypingIndicator />
+                )}
+                <div ref={bottomRef} />
+              </div>
+
+              {error && (
+                <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800/50 dark:bg-red-950/30">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="mt-0.5 shrink-0 text-red-500">
+                    <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3" />
+                    <path d="M7 4.5v3M7 9.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <p className="text-xs text-red-700 dark:text-red-300">{error}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Composer */}
+          <div
+            className="shrink-0 border-t border-black/6 px-3 pt-3 dark:border-white/10 sm:px-6 sm:pt-4"
+            style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="relative mx-auto max-w-3xl">
+              {/* Model + status row */}
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
                 <select
                   value={model}
                   onChange={e => setModel(e.target.value)}
-                  className="w-full rounded-2xl border border-gray-200 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-gray-400 dark:border-gray-800 dark:text-gray-100 dark:focus:border-gray-600"
-                  style={{ backgroundColor: 'var(--bg-card)' }}
+                  className="rounded-full border border-black/8 bg-white/80 px-2.5 py-1 text-xs text-gray-600 outline-none transition-colors hover:border-black/20 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:border-white/20 dark:hover:text-gray-100"
                 >
-                  {AUTONOMY_OPTIONS.map(option => (
-                    <option key={option.key} value={option.key} className="bg-white text-black dark:bg-gray-900 dark:text-gray-100">
-                      {option.label}
+                  {AUTONOMY_OPTIONS.map(opt => (
+                    <option key={opt.key} value={opt.key} className="bg-white text-black dark:bg-gray-900 dark:text-gray-100">
+                      {opt.label}
                     </option>
                   ))}
                 </select>
-              </label>
-            </div>
-
-            {/* Compare modes */}
-            <div
-              className="rounded-2xl border border-gray-200 px-4 py-3 dark:border-gray-800"
-              style={{ backgroundColor: 'var(--bg-card)' }}
-            >
-              <p className="mb-3 text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                Compare modes
-              </p>
-              <ul className="space-y-3 text-xs text-gray-600 dark:text-gray-300">
-                <li className="flex gap-2.5">
-                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-amber-400 dark:bg-amber-500" />
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">Hands on experience</p>
-                    <p className="mt-0.5 leading-relaxed text-gray-500 dark:text-gray-400">
-                      Quick, collaborative changes where you stay in the loop. Best for short tasks, exploration, and pair-programming.
-                    </p>
-                  </div>
-                </li>
-                <li className="flex gap-2.5">
-                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-indigo-400 dark:bg-indigo-500" />
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">Hands off experience</p>
-                    <p className="mt-0.5 leading-relaxed text-gray-500 dark:text-gray-400">
-                      Long-running autonomous work with extended context. Best for backlog sweeps, refactors, and overnight runs.
-                    </p>
-                  </div>
-                </li>
-                <li className="flex gap-2.5">
-                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-sky-500 dark:bg-sky-400" />
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      Plan mode
-                      <span className="ml-2 text-[10px] font-normal text-gray-400 dark:text-gray-500">interactive only</span>
-                    </p>
-                    <p className="mt-0.5 leading-relaxed text-gray-500 dark:text-gray-400">
-                      No edits or subagents. Asks clarifying questions and writes a plan.md. Best when you want to think before building.
-                    </p>
-                  </div>
-                </li>
-              </ul>
-            </div>
-
-            {/* Wake prompt */}
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
-                Wake prompt
-              </span>
-              <textarea
-                value={prompt}
-                onChange={e => setPrompt(e.target.value)}
-                rows={5}
-                className="w-full resize-none rounded-2xl border border-gray-200 bg-transparent px-3 py-2 text-sm leading-relaxed text-gray-900 outline-none transition-colors focus:border-gray-400 dark:border-gray-800 dark:text-gray-100 dark:focus:border-gray-600"
-                style={{ backgroundColor: 'var(--bg-card)' }}
-              />
-            </label>
-
-            {/* Status card */}
-            <div
-              className="rounded-2xl border border-gray-200 px-4 py-3 text-xs dark:border-gray-800"
-              style={{ backgroundColor: 'var(--bg-card)' }}
-            >
-              <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">Status</p>
-              <div className="space-y-1 text-gray-600 dark:text-gray-300">
-                <p>
-                  Status:{' '}
-                  <span className={`font-medium ${statusColor(config?.lastRunStatus ?? 'idle')}`}>
-                    {config?.lastRunStatus ?? 'idle'}
+                {config && (
+                  <span className="flex items-center gap-1.5 rounded-full border border-black/8 bg-white/80 px-2.5 py-1 text-[11px] text-gray-500 dark:border-white/10 dark:bg-white/5 dark:text-gray-400">
+                    <span className={`size-1.5 rounded-full ${config.enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                    {config.enabled
+                      ? config.nextHeartbeatAt
+                          ? `Next wake: ${new Date(config.nextHeartbeatAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                          : 'Heartbeat enabled'
+                      : 'Heartbeat off'}
                   </span>
-                </p>
-                <p>
-                  Next run:{' '}
-                  {config?.nextHeartbeatAt
-                    ? new Date(config.nextHeartbeatAt).toLocaleString()
-                    : <span className="text-gray-400 dark:text-gray-500">Not scheduled</span>}
-                </p>
-                <p>
-                  Last run:{' '}
-                  {config?.lastHeartbeatAt
-                    ? new Date(config.lastHeartbeatAt).toLocaleString()
-                    : <span className="text-gray-400 dark:text-gray-500">Never</span>}
-                </p>
+                )}
               </div>
-            </div>
 
-            {/* Action buttons */}
-            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                type="button"
-                onClick={handleWakeNow}
-                disabled={waking || wakeSuccess}
-                className="flex items-center justify-center gap-1.5 rounded-full border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:border-gray-400 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:border-gray-500 dark:hover:text-gray-100"
+              <div
+                className="flex items-end gap-2 rounded-[1.5rem] border border-black/10 px-3 py-2 shadow-sm transition-shadow focus-within:border-black/20 focus-within:shadow-md dark:border-white/10 dark:focus-within:border-white/20 sm:py-2.5"
+                style={{ backgroundColor: 'var(--bg-input)' }}
               >
-                {waking
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={input}
+                  onChange={autoResize}
+                  onKeyDown={handleKey}
+                  placeholder="Send a message to your super agent…"
+                  className="flex-1 resize-none bg-transparent py-2.5 text-base text-gray-900 outline-none placeholder-gray-400 dark:text-gray-100 dark:placeholder-gray-500 sm:py-3"
+                  style={{ maxHeight: '180px' }}
+                />
+                {sending
                   ? (
-                      <>
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin text-indigo-400">
-                          <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3" strokeOpacity="0.25" />
-                          <path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                      <button
+                        onClick={stopGeneration}
+                        aria-label="Stop"
+                        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 active:opacity-70"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                          <rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor" />
                         </svg>
-                        Waking…
-                      </>
+                      </button>
                     )
-                  : 'Wake Now'}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving}
-                className="rounded-full bg-gray-950 px-6 py-2 text-sm font-medium text-white transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-950"
-              >
-                {saving ? 'Saving…' : 'Save settings'}
-              </button>
+                  : (
+                      <button
+                        onClick={() => void send()}
+                        disabled={!input.trim()}
+                        aria-label="Send"
+                        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gray-950 text-white transition-opacity hover:opacity-80 disabled:opacity-25 active:opacity-70"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                          <path d="M7 12V2M7 2L3 6M7 2L11 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    )}
+              </div>
+              <p className="mt-2 hidden text-center text-[11px] text-gray-400 dark:text-gray-500 sm:block">
+                Enter to send · Shift+Enter for new line
+              </p>
             </div>
           </div>
+        </main>
+
+        {/* Settings drawer */}
+        {settingsOpen && (
+          <aside
+            className="hidden w-[360px] shrink-0 overflow-y-auto border-l border-black/6 px-5 py-6 dark:border-white/8 lg:block"
+            style={{ backgroundColor: 'var(--bg-card)' }}
+          >
+            <SettingsPanel
+              canConfigure={canConfigure}
+              enabled={enabled}
+              setEnabled={setEnabled}
+              heartbeat={heartbeat}
+              setHeartbeat={setHeartbeat}
+              prompt={prompt}
+              setPrompt={setPrompt}
+              model={model}
+              setModel={setModel}
+              config={config}
+              statusColor={statusColor}
+              saving={saving}
+              waking={waking}
+              wakeSuccess={wakeSuccess}
+              saveSuccess={saveSuccess}
+              onSave={handleSave}
+              onWake={handleWakeNow}
+            />
+          </aside>
         )}
-      </main>
+      </div>
+
+      {/* Mobile settings sheet */}
+      {settingsOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-end bg-black/40 lg:hidden"
+          onClick={() => setSettingsOpen(false)}
+        >
+          <div
+            className="max-h-[85dvh] w-full overflow-y-auto rounded-t-3xl px-5 py-6"
+            style={{ backgroundColor: 'var(--bg-card)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-gray-300 dark:bg-gray-700" />
+            <SettingsPanel
+              canConfigure={canConfigure}
+              enabled={enabled}
+              setEnabled={setEnabled}
+              heartbeat={heartbeat}
+              setHeartbeat={setHeartbeat}
+              prompt={prompt}
+              setPrompt={setPrompt}
+              model={model}
+              setModel={setModel}
+              config={config}
+              statusColor={statusColor}
+              saving={saving}
+              waking={waking}
+              wakeSuccess={wakeSuccess}
+              saveSuccess={saveSuccess}
+              onSave={handleSave}
+              onWake={handleWakeNow}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MessageBubble({ msg }: { msg: Message }) {
+  const isUser = msg.role === 'user';
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+          isUser
+            ? 'bg-gray-950 text-white dark:bg-gray-100 dark:text-gray-950'
+            : 'border border-black/6 text-gray-900 dark:border-white/10 dark:text-gray-100'
+        }`}
+        style={isUser ? undefined : { backgroundColor: 'var(--bg-card)' }}
+      >
+        {msg.content || <span className="opacity-50">…</span>}
+      </div>
+    </div>
+  );
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <div
+        className="flex items-center gap-1 rounded-2xl border border-black/6 px-4 py-3 dark:border-white/10"
+        style={{ backgroundColor: 'var(--bg-card)' }}
+      >
+        <span className="size-1.5 animate-pulse rounded-full bg-gray-400 [animation-delay:-0.3s] dark:bg-gray-500" />
+        <span className="size-1.5 animate-pulse rounded-full bg-gray-400 [animation-delay:-0.15s] dark:bg-gray-500" />
+        <span className="size-1.5 animate-pulse rounded-full bg-gray-400 dark:bg-gray-500" />
+      </div>
+    </div>
+  );
+}
+
+type SettingsPanelProps = {
+  canConfigure: boolean;
+  enabled: boolean;
+  setEnabled: (v: boolean) => void;
+  heartbeat: string;
+  setHeartbeat: (v: string) => void;
+  prompt: string;
+  setPrompt: (v: string) => void;
+  model: string;
+  setModel: (v: string) => void;
+  config: SuperAgentConfig | null;
+  statusColor: (status: string) => string;
+  saving: boolean;
+  waking: boolean;
+  wakeSuccess: boolean;
+  saveSuccess: boolean;
+  onSave: () => void;
+  onWake: () => void;
+};
+
+function SettingsPanel(props: SettingsPanelProps) {
+  const {
+    canConfigure, enabled, setEnabled, heartbeat, setHeartbeat, prompt, setPrompt,
+    model, setModel, config, statusColor, saving, waking, wakeSuccess, saveSuccess,
+    onSave, onWake,
+  } = props;
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="mb-1 text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+          Wake-up schedule
+        </h2>
+        <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+          Loop the agent on a heartbeat to keep it working in the background, or wake it instantly with one click.
+        </p>
+      </div>
+
+      {!canConfigure && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-700 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-300">
+          Send a message first to start the conversation, then schedule wake-ups here.
+        </div>
+      )}
+
+      {wakeSuccess && (
+        <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[11px] text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+          Super agent woke up — working in the background.
+        </div>
+      )}
+
+      {saveSuccess && (
+        <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[11px] text-emerald-700 dark:border-emerald-800/50 dark:bg-emerald-950/30 dark:text-emerald-300">
+          Settings saved.
+        </div>
+      )}
+
+      <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-black/8 px-3 py-2.5 dark:border-white/10">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-gray-900 dark:text-gray-100">Enable heartbeat</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+            Wake this conversation automatically on a schedule.
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={e => setEnabled(e.target.checked)}
+          disabled={!canConfigure}
+          className="size-4"
+        />
+      </label>
+
+      <label className="block">
+        <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
+          Heartbeat interval (minutes)
+        </span>
+        <input
+          type="number"
+          min={1}
+          max={1440}
+          value={heartbeat}
+          onChange={e => setHeartbeat(e.target.value)}
+          disabled={!canConfigure}
+          className="w-full rounded-2xl border border-black/8 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-black/30 disabled:opacity-50 dark:border-white/10 dark:text-gray-100 dark:focus:border-white/30"
+        />
+      </label>
+
+      <label className="block">
+        <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
+          Model
+        </span>
+        <select
+          value={model}
+          onChange={e => setModel(e.target.value)}
+          disabled={!canConfigure}
+          className="w-full rounded-2xl border border-black/8 bg-transparent px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-black/30 disabled:opacity-50 dark:border-white/10 dark:text-gray-100 dark:focus:border-white/30"
+        >
+          {AUTONOMY_OPTIONS.map(opt => (
+            <option key={opt.key} value={opt.key} className="bg-white text-black dark:bg-gray-900 dark:text-gray-100">
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="block">
+        <span className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-gray-400">
+          Wake prompt
+        </span>
+        <textarea
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          disabled={!canConfigure}
+          rows={5}
+          className="w-full resize-none rounded-2xl border border-black/8 bg-transparent px-3 py-2 text-sm leading-relaxed text-gray-900 outline-none transition-colors focus:border-black/30 disabled:opacity-50 dark:border-white/10 dark:text-gray-100 dark:focus:border-white/30"
+        />
+      </label>
+
+      <div className="rounded-2xl border border-black/8 px-3 py-2.5 text-[11px] dark:border-white/10">
+        <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500">Status</p>
+        <div className="space-y-1 text-gray-600 dark:text-gray-300">
+          <p>
+            Status:
+            {' '}
+            <span className={`font-medium ${statusColor(config?.lastRunStatus ?? 'idle')}`}>
+              {config?.lastRunStatus ?? 'idle'}
+            </span>
+          </p>
+          <p>
+            Next run:
+            {' '}
+            {config?.nextHeartbeatAt
+              ? new Date(config.nextHeartbeatAt).toLocaleString()
+              : <span className="text-gray-400 dark:text-gray-500">Not scheduled</span>}
+          </p>
+          <p>
+            Last run:
+            {' '}
+            {config?.lastHeartbeatAt
+              ? new Date(config.lastHeartbeatAt).toLocaleString()
+              : <span className="text-gray-400 dark:text-gray-500">Never</span>}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onWake}
+          disabled={!canConfigure || waking}
+          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-black/10 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:border-black/30 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-gray-300 dark:hover:border-white/30 dark:hover:text-gray-100"
+        >
+          {waking
+            ? (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="animate-spin text-indigo-400">
+                    <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3" strokeOpacity="0.25" />
+                    <path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  Waking…
+                </>
+              )
+            : 'Wake Now'}
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!canConfigure || saving}
+          className="w-full rounded-full bg-gray-950 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-100 dark:text-gray-950"
+        >
+          {saving ? 'Saving…' : 'Save settings'}
+        </button>
+      </div>
     </div>
   );
 }
