@@ -64,6 +64,10 @@ function SuperAgentPageInner() {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollGenerationRef = useRef(0);
+  const activeSseFetchRef = useRef(false);
+  const currentAssistantIdRef = useRef<string | null>(null);
 
   const applyConfig = useCallback((cfg: SuperAgentConfig) => {
     setConfig(cfg);
@@ -72,6 +76,106 @@ function SuperAgentPageInner() {
     setPrompt(cfg.wakePrompt);
     setModel(cfg.model);
   }, []);
+
+  const refreshMessages = useCallback(async (convId: string) => {
+    try {
+      const res = await fetch(`/api/conversations/${convId}/messages`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json() as { messages?: { id: string; role: string; content: string }[] };
+      const loaded = (data.messages ?? [])
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({
+          id: m.id,
+          role: m.role as 'user' | 'assistant',
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+        }));
+
+      setMessages((prev) => {
+        if (prev.length === loaded.length) {
+          const a = prev[prev.length - 1];
+          const b = loaded[loaded.length - 1];
+          if (a?.id === b?.id && a?.content === b?.content) return prev;
+        }
+        return loaded;
+      });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const stopBackgroundPoll = useCallback(() => {
+    pollGenerationRef.current += 1;
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  const pollBackgroundJob = useCallback(async (convId: string, jobId: string, cursor: number, generation: number) => {
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/events?after=${cursor}`, { cache: 'no-store' });
+      if (generation !== pollGenerationRef.current) return;
+      if (res.status === 404) {
+        stopBackgroundPoll();
+        setSending(false);
+        return;
+      }
+      if (!res.ok) {
+        pollTimerRef.current = setTimeout(() => {
+          void pollBackgroundJob(convId, jobId, cursor, generation);
+        }, 1500);
+        return;
+      }
+
+      const payload = await res.json() as {
+        events?: Array<{ id: number; type: string; data: Record<string, unknown> }>;
+        done?: boolean;
+      };
+      const events = payload.events ?? [];
+      let nextCursor = cursor;
+      for (const event of events) {
+        nextCursor = Math.max(nextCursor, event.id);
+        if (event.type === 'content' && !activeSseFetchRef.current) {
+          const text = typeof event.data?.text === 'string' ? event.data.text : '';
+          if (text) {
+            const targetId = currentAssistantIdRef.current;
+            if (targetId) {
+              setMessages(prev => prev.map(m =>
+                m.id === targetId ? { ...m, content: m.content + text } : m,
+              ));
+            }
+          }
+        } else if (event.type === 'error') {
+          const message = typeof event.data?.message === 'string' ? event.data.message : null;
+          if (message) setError(message);
+        }
+      }
+
+      if (payload.done) {
+        stopBackgroundPoll();
+        setSending(false);
+        void refreshMessages(convId);
+        return;
+      }
+
+      pollTimerRef.current = setTimeout(() => {
+        void pollBackgroundJob(convId, jobId, nextCursor, generation);
+      }, 1500);
+    } catch {
+      if (generation !== pollGenerationRef.current) return;
+      pollTimerRef.current = setTimeout(() => {
+        void pollBackgroundJob(convId, jobId, cursor, generation);
+      }, 1500);
+    }
+  }, [refreshMessages, stopBackgroundPoll]);
+
+  const scheduleBackgroundPoll = useCallback((convId: string, jobId: string) => {
+    stopBackgroundPoll();
+    const generation = pollGenerationRef.current;
+    pollTimerRef.current = setTimeout(() => {
+      void pollBackgroundJob(convId, jobId, 0, generation);
+    }, 0);
+  }, [pollBackgroundJob, stopBackgroundPoll]);
 
   // Load conversation messages + config when conversationId changes
   useEffect(() => {
@@ -115,6 +219,28 @@ function SuperAgentPageInner() {
       cancelled = true;
     };
   }, [conversationId, applyConfig]);
+
+  // Background runs (heartbeats, "wake now", etc.) can append messages without an active stream.
+  // Poll so new assistant messages show up without a manual refresh.
+  useEffect(() => {
+    if (!conversationId) return;
+    const convId = conversationId;
+    let stopped = false;
+    const interval = setInterval(() => {
+      if (stopped) return;
+      if (sending) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void refreshMessages(convId);
+    }, 2000);
+    return () => {
+      stopped = true;
+      clearInterval(interval);
+    };
+  }, [conversationId, sending, refreshMessages]);
+
+  useEffect(() => () => {
+    stopBackgroundPoll();
+  }, [stopBackgroundPoll]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -164,6 +290,7 @@ function SuperAgentPageInner() {
     const userMsg: Message = { id: createId(), role: 'user', content: text };
     const assistantId = createId();
     const jobId = createId();
+    currentAssistantIdRef.current = assistantId;
     setMessages(prev => [...prev, userMsg, { id: assistantId, role: 'assistant', content: '' }]);
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
@@ -176,11 +303,22 @@ function SuperAgentPageInner() {
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    const currentAssistantId = assistantId;
+    let currentAssistantId = assistantId;
     void history;
-    void jobId;
+    scheduleBackgroundPoll(convId, jobId);
+    let sseDeliveredContent = false;
+    let keepBackgroundJob = false;
+    let sseActivityTimeout: ReturnType<typeof setTimeout> | null = null;
 
     try {
+      activeSseFetchRef.current = true;
+      sseActivityTimeout = setTimeout(() => {
+        activeSseFetchRef.current = false;
+        if (!sseDeliveredContent) {
+          abortController.abort();
+        }
+      }, 3000);
+
       const res = await fetch('/api/super-agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,6 +326,7 @@ function SuperAgentPageInner() {
           conversationId: convId,
           message: text,
           assistantMessageId: assistantId,
+          jobId,
         }),
         signal: abortController.signal,
       });
@@ -217,13 +356,21 @@ function SuperAgentPageInner() {
               error?: boolean;
               message?: string;
               tool?: string;
+              messageId?: string;
+              jobId?: string;
             };
             if (typeof json.delta === 'string' && json.delta) {
+              sseDeliveredContent = true;
               const delta = json.delta;
               const targetId = currentAssistantId;
               setMessages(prev => prev.map(m =>
                 m.id === targetId ? { ...m, content: m.content + delta } : m,
               ));
+            } else if (json.type === 'assistant_msg_id' && typeof json.messageId === 'string') {
+              currentAssistantId = json.messageId;
+              currentAssistantIdRef.current = json.messageId;
+            } else if (json.type === 'job_id' && typeof json.jobId === 'string') {
+              scheduleBackgroundPoll(convId, json.jobId);
             } else if (json.type === 'error' && json.message) {
               setError(json.message);
             }
@@ -240,19 +387,36 @@ function SuperAgentPageInner() {
           applyConfig(await cfgRes.json() as SuperAgentConfig);
         }
       } catch {}
+      if (sseActivityTimeout) clearTimeout(sseActivityTimeout);
+      if (sseDeliveredContent) {
+        stopBackgroundPoll();
+        setSending(false);
+      } else {
+        keepBackgroundJob = true;
+      }
+      activeSseFetchRef.current = false;
+      if (!keepBackgroundJob) {
+        void refreshMessages(convId);
+      }
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
+      if ((err as Error).name === 'AbortError') {
+        keepBackgroundJob = true;
+      } else {
         setError((err as Error).message ?? 'Something went wrong while contacting the agent.');
       }
     } finally {
+      if (sseActivityTimeout) clearTimeout(sseActivityTimeout);
+      activeSseFetchRef.current = false;
       abortRef.current = null;
-      setSending(false);
+      // Polling owns completion when SSE is buffered/aborted.
     }
   }
 
   function stopGeneration() {
     abortRef.current?.abort();
     abortRef.current = null;
+    stopBackgroundPoll();
+    activeSseFetchRef.current = false;
     setSending(false);
   }
 

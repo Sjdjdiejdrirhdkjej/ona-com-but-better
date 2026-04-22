@@ -5,7 +5,7 @@ import { db } from '@/libs/DB';
 import { logger } from '@/libs/Logger';
 import { authFailureResponse, getRequestAuth, isAuthFailure, requireApiKeyScope } from '@/libs/ApiKeys';
 import { runOpencode } from '@/libs/OpencodeAgent';
-import { conversationsSchema, messagesSchema } from '@/models/Schema';
+import { agentEventsSchema, agentJobsSchema, conversationsSchema, messagesSchema } from '@/models/Schema';
 
 export const runtime = 'nodejs';
 
@@ -13,10 +13,27 @@ const requestSchema = z.object({
   conversationId: z.string().min(1),
   message: z.string().min(1),
   assistantMessageId: z.string().min(1).optional(),
+  jobId: z.string().uuid().optional(),
 });
 
 function sseEvent(data: unknown) {
   return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+async function persistJobEvent(jobId: string, type: string, data: Record<string, unknown> = {}) {
+  try {
+    await db.insert(agentEventsSchema).values({ jobId, type, data: JSON.stringify(data) });
+  } catch (err) {
+    logger.warn({ err, jobId, type }, 'persistJobEvent: failed to persist event');
+  }
+}
+
+async function markJobStatus(jobId: string, status: 'done' | 'error') {
+  try {
+    await db.update(agentJobsSchema).set({ status }).where(eq(agentJobsSchema.id, jobId));
+  } catch (err) {
+    logger.warn({ err, jobId, status }, 'markJobStatus: failed to update job status');
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -39,7 +56,7 @@ export async function POST(req: NextRequest) {
     userId = auth.userId;
   }
 
-  const { conversationId, message, assistantMessageId } = parsed.data;
+  const { conversationId, message, assistantMessageId, jobId: clientJobId } = parsed.data;
 
   let [conversation] = await db
     .select({ id: conversationsSchema.id, userId: conversationsSchema.userId })
@@ -86,6 +103,14 @@ export async function POST(req: NextRequest) {
   }
 
   const finalAssistantId = assistantMessageId ?? crypto.randomUUID();
+  let jobId: string | null = clientJobId ?? crypto.randomUUID();
+
+  try {
+    await db.insert(agentJobsSchema).values({ id: jobId, conversationId, status: 'running' });
+  } catch (err) {
+    logger.warn({ err, jobId, conversationId }, 'Failed to create super-agent job; continuing with SSE only');
+    jobId = null;
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -94,6 +119,9 @@ export async function POST(req: NextRequest) {
       let errored = false;
 
       controller.enqueue(enc.encode(sseEvent({ type: 'assistant_msg_id', messageId: finalAssistantId })));
+      if (jobId) {
+        controller.enqueue(enc.encode(sseEvent({ type: 'job_id', jobId })));
+      }
 
       try {
         for await (const event of runOpencode({ conversationId, message })) {
@@ -102,6 +130,9 @@ export async function POST(req: NextRequest) {
           } else if (event.type === 'text') {
             assistantText += event.text;
             controller.enqueue(enc.encode(sseEvent({ delta: event.text })));
+            if (jobId && event.text) {
+              await persistJobEvent(jobId, 'content', { text: event.text });
+            }
           } else if (event.type === 'tool_start') {
             controller.enqueue(enc.encode(sseEvent({ type: 'tool_start', tool: event.tool })));
           } else if (event.type === 'tool_finish') {
@@ -109,6 +140,9 @@ export async function POST(req: NextRequest) {
           } else if (event.type === 'error') {
             errored = true;
             controller.enqueue(enc.encode(sseEvent({ type: 'error', message: event.message })));
+            if (jobId) {
+              await persistJobEvent(jobId, 'error', { message: event.message });
+            }
           }
         }
 
@@ -129,10 +163,18 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        if (jobId) {
+          await persistJobEvent(jobId, 'done', {});
+          await markJobStatus(jobId, errored ? 'error' : 'done');
+        }
         controller.enqueue(enc.encode(sseEvent({ type: 'done', error: errored })));
         controller.enqueue(enc.encode('data: [DONE]\n\n'));
       } catch (err) {
         controller.enqueue(enc.encode(sseEvent({ type: 'error', message: (err as Error).message })));
+        if (jobId) {
+          await persistJobEvent(jobId, 'error', { message: (err as Error).message });
+          await markJobStatus(jobId, 'error');
+        }
         controller.enqueue(enc.encode('data: [DONE]\n\n'));
       } finally {
         controller.close();
